@@ -1,0 +1,40 @@
+node_modules
+.next
+.env.local
+.env.*.local
+
+
+# ME-Smart: protect private files
+
+.env
+.env.local
+.env.*.local
+
+# Student data and database backups
+/supabase/Data/
+/supabase/Backups/
+
+# CSV exports
+*.csv
+
+# Next.js temporary files
+/node_modules/
+/.next/
+
+*.tsbuildinfo
+
+# Exclude all backup and exported data
+**/Backups/
+**/Data/
+*.csv
+*.tsbuildinfo
+
+# Protect entire Supabase local folder
+/supabase/
+
+# Protect secrets and exported data
+.env
+.env.local
+.env.*.local
+*.csv
+*.tsbuildinfo
