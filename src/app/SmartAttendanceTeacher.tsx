@@ -31,7 +31,7 @@ export default function SmartAttendanceTeacher({session,courseCode,onLockChange,
  },[sid,session.is_cancelled,readWindow,applyWindow]);
  useEffect(()=>{if(!open||!ends||now<Date.parse(ends))return;setOpen(false);setToken('');setExpanded(false);setInfo('หมดเวลาเปิดรับเช็คชื่อแล้ว')},[open,ends,now]);
  useEffect(()=>{if(!open||session.is_cancelled)return;let active=true,inFlight=false;
-  const rotate=async()=>{if(inFlight)return;inFlight=true;try{const {data,error:e}=await db().rpc('smart_rotate_qr',{p_session_id:sid});if(!active)return;if(e)throw e;if(typeof data!=='string'||!data)throw Error('สร้าง QR ไม่สำเร็จ');setToken(data);setExpires(Date.now()+29000);setError('')}
+  const rotate=async()=>{if(inFlight)return;inFlight=true;setToken('');const requestedAt=Date.now();try{const {data,error:e}=await db().rpc('smart_rotate_qr',{p_session_id:sid});if(!active)return;if(e)throw e;if(typeof data!=='string'||!data)throw Error('สร้าง QR ไม่สำเร็จ');if(Date.now()>=requestedAt+29000){setToken('');return}setToken(data);setExpires(requestedAt+29000);setError('')}
    catch(e){if(!active)return;setToken('');setError(userMessage(e));if(/closed|cancelled|authorized/i.test(userMessage(e))){setOpen(false);setExpanded(false)}}finally{inFlight=false}};
   void rotate();const t=setInterval(()=>void rotate(),20000);return()=>{active=false;clearInterval(t)};
  },[open,sid,session.is_cancelled]);
