@@ -1,11 +1,12 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import Image from 'next/image';
+import { userMessage } from '../lib/messages';
 import { db } from '../lib/supabase';
 import styles from './dashboard.module.css';
 import AttendancePanel from './AttendancePanel';
+import AttendanceSecurity from './AttendanceSecurity';
 import AttendanceAnalytics from './AttendanceAnalytics';
-import SmartAttendanceTeacher from './SmartAttendanceTeacher';
 import StudentLeaveRequest from './StudentLeaveRequest';
 import TeacherLeaveApproval from './TeacherLeaveApproval';
 
@@ -30,6 +31,7 @@ export default function Home() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [classroomLocked,setClassroomLocked]=useState(false);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
   const [signup, setSignup] = useState(false);
@@ -55,7 +57,8 @@ export default function Home() {
   const load = useCallback(async () => {
     try {
       const { data: { user: u }, error: authError } = await db().auth.getUser();
-      if (authError) throw authError;
+      if (authError && authError.name !== 'AuthSessionMissingError') throw authError;
+      setError('');
       setUser(u?.id ?? null);
       if (!u) {
         setProfile(null); setCourses([]); setRequests([]); setApproved([]); setSelectedCourseId(null); setMembers([]);
@@ -103,6 +106,7 @@ export default function Home() {
   }, [load]);
 
   const openCourse = async (id: number) => {
+    if(classroomLocked){setError('กรุณาปิดรับ QR และบันทึกหรือยกเลิกการแก้ไขก่อนเปลี่ยนรายวิชา');return;}
     if (profile?.role !== 'teacher') return;
     setSelectedCourseId(id); setMemberSearch(''); setMemberStatus('all'); setSelectedStudentId(null); setMembersLoading(true); setError('');
     try {
@@ -133,7 +137,7 @@ export default function Home() {
         setSignup(false);
       } else {
         const { error: e } = await db().auth.signInWithPassword({ email, password });
-        if (e) throw e;
+        if (e) throw new Error(userMessage(e));
         await load();
       }
     });
@@ -171,6 +175,7 @@ export default function Home() {
     });
   }
   async function signOut() {
+    if(classroomLocked){setError('กรุณาปิดรับ QR และบันทึกหรือยกเลิกการแก้ไขก่อนออกจากระบบ');return;}
     await run(async () => {
       const { error: e } = await db().auth.signOut();
       if (e) throw e;
@@ -179,6 +184,7 @@ export default function Home() {
   }
 
   async function removeStudent(course: number, student: string) {
+    if(classroomLocked){setError('กรุณาปิดรับ QR และจัดการการแก้ไขให้เสร็จก่อนนำสมาชิกออก');return;}
     if (!window.confirm('ยืนยันการนำสมาชิกออกจากรายวิชานี้? นักศึกษาจะต้องขอเข้าร่วมใหม่')) return;
     await run(async () => {
       const { error: e } = await db().rpc('remove_course_member', { p_course_id: course, p_student_id: student });
@@ -213,28 +219,38 @@ export default function Home() {
   return <>
     <header className={styles.topbar}>
       <div className={styles.topInner}>
-        <div className={styles.brand}><span className={styles.brandIcon}>🎓</span><span>ME-Smart <span className={styles.brandDivider}>/</span> Phase 1</span></div>
+        <div className={styles.brand}><span className={styles.brandIcon}>⚙</span><span>ME-Smart <span className={styles.brandDivider}>/</span> Mechanical Engineering</span></div>
         <span className={styles.topSubtitle}>Mechanical Engineering · Academic Platform</span>
       </div>
     </header>
     <main className={styles.container}>
       <div className={styles.pageHeading}>
-        <div><p className={styles.eyebrow}>ACADEMIC MANAGEMENT SYSTEM</p><h1>{profile ? 'แดชบอร์ด' : 'ระบบจัดการรายวิชาและนักศึกษา'}</h1><p className={styles.muted}>ระบบบัญชีผู้ใช้ · รายวิชา · คำขอเข้าร่วม · การอนุมัติ</p></div>
+        <div><p className={styles.eyebrow}>RMUTK · MECHANICAL ENGINEERING</p><h1>{profile ? 'แดชบอร์ด' : 'ห้องเรียนอัจฉริยะ วิศวกรรมเครื่องกล'}</h1><p className={styles.muted}>จัดการรายวิชา · นักศึกษา · การเข้าเรียน</p></div>
         {profile && <button type="button" className={styles.secondaryButton} disabled={busy} onClick={signOut}>ออกจากระบบ</button>}
       </div>
       {error && <div role="alert" className={styles.error}>{error}</div>}
       {msg && <div role="status" className={styles.success}>{msg}</div>}
       {initialLoading ? <section className={styles.card}>กำลังโหลดข้อมูล...</section> : !user ? (
+        <div className={styles.loginLayout}>
+        <aside className={styles.engineeringHero}>
+          <span className={styles.heroBadge}>MECHANICAL ENGINEERING</span>
+          <h2>เชื่อมต่อการเรียนรู้<br />สู่โลกวิศวกรรม</h2>
+          <p>พื้นที่จัดการรายวิชาและการเข้าเรียน<br />สาขาวิชาวิศวกรรมเครื่องกล<br />มหาวิทยาลัยเทคโนโลยีราชมงคลกรุงเทพ</p>
+          <div className={styles.heroLegend}><span>01 / COURSES</span><span>02 / ATTENDANCE</span><span>03 / ANALYTICS</span></div>
+        </aside>
         <section className={`${styles.card} ${styles.loginCard}`}>
+          <p className={styles.eyebrow}>WELCOME TO ME-SMART</p>
           <h2>{signup ? 'สมัครบัญชีนักศึกษา' : 'เข้าสู่ระบบ'}</h2>
           <p className={styles.muted}>บัญชีอาจารย์ต้องได้รับสิทธิ์จากผู้ดูแลฐานข้อมูลเท่านั้น</p>
           <form onSubmit={e => { e.preventDefault(); void authenticate(); }}>
             {signup && <><label className={styles.field}>ชื่อ–นามสกุล<input required value={name} onChange={e => setName(e.target.value)} /></label><label className={styles.field}>รหัสนักศึกษา<input required value={studentId} onChange={e => setStudentId(e.target.value)} /></label></>}
             <label className={styles.field}>อีเมล<input required type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} /></label>
-            <label className={styles.field}>รหัสผ่าน<input required type="password" autoComplete={signup ? 'new-password' : 'current-password'} value={password} onChange={e => setPassword(e.target.value)} /></label>
-            <div className={styles.actions}><button disabled={busy} type="submit" className={styles.primaryButton}>{signup ? 'สมัครบัญชี' : 'เข้าสู่ระบบ'}</button><button type="button" disabled={busy} className={styles.secondaryButton} onClick={() => { setSignup(!signup); setError(''); setMsg(''); }}>{signup ? 'มีบัญชีแล้ว' : 'สมัครบัญชีนักศึกษา'}</button></div>
+            <label className={styles.field}>รหัสผ่าน<input required type="password" minLength={signup ? 6 : undefined} autoComplete={signup ? 'new-password' : 'current-password'} value={password} onChange={e => setPassword(e.target.value)} /></label>
+            <div className={styles.actions}><button disabled={busy} type="submit" className={styles.primaryButton}>{busy ? 'กำลังดำเนินการ...' : signup ? 'สมัครบัญชี' : 'เข้าสู่ระบบ'}</button><button type="button" disabled={busy} className={styles.secondaryButton} onClick={() => { setSignup(!signup); setError(''); setMsg(''); }}>{signup ? 'มีบัญชีแล้ว' : 'สมัครบัญชีนักศึกษา'}</button></div>
           </form>
+          <div className={styles.quickGuide}><strong>เริ่มใช้งานสำหรับนักศึกษา</strong><p>1. สมัครบัญชีและยืนยันอีเมล<br />2. เข้าร่วมรายวิชาและรออาจารย์อนุมัติ<br />3. สแกน QR เพื่อบันทึกการเข้าเรียน</p></div>
         </section>
+        </div>
       ) : !profile ? <section className={styles.card}>กำลังโหลดข้อมูลผู้ใช้... <button className={styles.secondaryButton} onClick={signOut}>ออกจากระบบ</button></section> : <>
         {profile.role === 'teacher' ? <>
           <section className={`${styles.card} ${styles.teacherHero}`}>
@@ -312,19 +328,16 @@ export default function Home() {
           {membersLoading ? <p className={styles.empty}>กำลังโหลดรายชื่อนักศึกษา...</p> : filteredMembers.length === 0 ? <p className={styles.empty}>ไม่พบรายชื่อนักศึกษา</p> : <div className={styles.memberTableWrap}><table className={styles.memberTable}><thead><tr><th>ชื่อ–นามสกุล</th><th>รหัสนักศึกษา</th><th>สถานะ</th><th>การดำเนินการ</th></tr></thead><tbody>{filteredMembers.map(m => <tr key={`${m.course_id}-${m.student_id}`}><td>{m.profiles?.full_name ?? 'ไม่พบข้อมูล'}</td><td>{m.profiles?.student_id ?? '-'}</td><td><span className={styles.pill}>{statusText(m.status)}</span></td><td><div className={styles.actions}><button type="button" className={styles.secondaryButton} onClick={() => setSelectedStudentId(m.student_id)}>รายละเอียด</button>{m.status === 'pending' && <><button type="button" disabled={busy} className={styles.primaryButton} onClick={() => void decide(m.course_id,m.student_id,true)}>อนุมัติ</button><button type="button" disabled={busy} className={styles.dangerButton} onClick={() => void decide(m.course_id,m.student_id,false)}>ปฏิเสธ</button></>}{m.status === 'approved' && <button type="button" disabled={busy} className={styles.dangerButton} onClick={() => void removeStudent(m.course_id,m.student_id)}>นำออก</button>}</div></td></tr>)}</tbody></table></div>}
           {selectedStudent && <div className={styles.studentDetail} role="region" aria-label="รายละเอียดนักศึกษา"><div className={styles.sectionHeading}><h3>ข้อมูลนักศึกษา</h3><button type="button" className={styles.secondaryButton} onClick={() => setSelectedStudentId(null)}>ปิด</button></div><dl className={styles.detailGrid}><dt>ชื่อ–นามสกุล</dt><dd>{selectedStudent.profiles?.full_name ?? '-'}</dd><dt>รหัสนักศึกษา</dt><dd>{selectedStudent.profiles?.student_id ?? '-'}</dd><dt>สถานะในรายวิชา</dt><dd>{statusText(selectedStudent.status)}</dd><dt>รายวิชา</dt><dd>{selectedCourse.code} — {selectedCourse.title}</dd></dl></div>}
           <p className={styles.muted}>แสดงเฉพาะนักศึกษาที่ส่งคำขอเข้าร่วมรายวิชานี้แล้ว · การนำสมาชิกออกต้องได้รับการยืนยัน</p>
-          <AttendancePanel key={selectedCourse.id} courseId={selectedCourse.id} courseCode={selectedCourse.code} teacher={true} />
-          <SmartAttendanceTeacher
-               key={`smart-${selectedCourse.id}`}
-               courseId={selectedCourse.id}
-              />
+          <AttendancePanel key={selectedCourse.id} courseId={selectedCourse.id} courseCode={selectedCourse.code} teacher={true} onLockChange={setClassroomLocked} />
                     <TeacherLeaveApproval
             key={`leave-${selectedCourse.id}`}
             courseId={selectedCourse.id}
           />
+          <AttendanceSecurity key={`security-${selectedCourse.id}`} courseId={selectedCourse.id} />
           <AttendanceAnalytics key={`analytics-${selectedCourse.id}`} courseId={selectedCourse.id} courseCode={selectedCourse.code} />
         </section>}
       </>}
-      <footer className={styles.footer}>ME-Smart · Phase 2 Attendance · ยังไม่เปิดฟังก์ชันคะแนน · ข้อมูลส่วนบุคคลใช้เพื่อการเรียนการสอนเท่านั้น</footer>
+      <footer className={styles.footer}>ME-Smart · Mechanical Engineering · RMUTK · ข้อมูลส่วนบุคคลใช้เพื่อการเรียนการสอนเท่านั้น</footer>
     </main>
   </>;
 }
