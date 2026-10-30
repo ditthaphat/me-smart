@@ -31,7 +31,7 @@ const err = (e: unknown): string => {
 
   return String(e);
 };
-export default function AttendancePanel({courseId,courseCode,teacher,onLockChange}:{courseId:number;courseCode:string;teacher:boolean;onLockChange?:(locked:boolean)=>void}){
+export default function AttendancePanel({courseId,courseCode,teacher,onLockChange,onSessionsChange}:{courseId:number;courseCode:string;teacher:boolean;onLockChange?:(locked:boolean)=>void;onSessionsChange?:(sessionId?:number)=>void}){
  const [exporting,setExporting]=useState(false);
  const [sessions,setSessions]=useState<Session[]>([]),[members,setMembers]=useState<Member[]>([]),[records,setRecords]=useState<RecordRow[]>([]);
  const [selected,setSelected]=useState<number|null>(null),[date,setDate]=useState(()=>new Date().toLocaleDateString('en-CA')),[topic,setTopic]=useState('');
@@ -81,7 +81,7 @@ function selectSession(id:number) {
  },[teacher,qrLocked,dirty,busy,selected,recordsLoading]);
 
  const counts=useMemo(()=>Object.fromEntries(options.map(o=>[o.value,records.filter(r=>r.status===o.value).length])) as Record<Status,number>,[records]);
- async function create(){if(qrLocked||busy)return;if(dirty){setError('กรุณาบันทึกหรือยกเลิกการแก้ไขรายชื่อก่อนสร้างคาบใหม่');return;}if(!date||!topic.trim()){setError('กรุณากรอกวันที่และหัวข้อคาบเรียน');return;}setBusy(true);setError('');setMessage('');try{const {data,error:e}=await db().rpc('create_attendance_session',{p_course_id:courseId,p_date:date,p_topic:topic.trim()});if(e)throw e;await refresh();setSelected(Number(data));setTopic('');setMessage('สร้างคาบเรียนแล้ว');}catch(e){setError(err(e))}finally{setBusy(false)}}
+ async function create(){if(qrLocked||busy)return;if(dirty){setError('กรุณาบันทึกหรือยกเลิกการแก้ไขรายชื่อก่อนสร้างคาบใหม่');return;}if(!date||!topic.trim()){setError('กรุณากรอกวันที่และหัวข้อคาบเรียน');return;}setBusy(true);setError('');setMessage('');try{const {data,error:e}=await db().rpc('create_attendance_session',{p_course_id:courseId,p_date:date,p_topic:topic.trim()});if(e)throw e;await refresh();setSelected(Number(data));onSessionsChange?.(Number(data));setTopic('');setMessage('สร้างคาบเรียนแล้ว');}catch(e){setError(err(e))}finally{setBusy(false)}}
  function beginEditSession() {
   if (!selectedSession || qrLocked || busy) return;
 
@@ -118,6 +118,7 @@ async function updateSession() {
 
     setEditingSession(false);
     await refresh();
+    onSessionsChange?.(selectedSession.id);
     setMessage('แก้ไขข้อมูลคาบเรียนสำเร็จ');
   } catch (e) {
     setError(err(e));
@@ -153,6 +154,7 @@ async function deleteSession() {
 
     setEditingSession(false);
     await refresh();
+    onSessionsChange?.();
     setMessage('ลบคาบเรียนสำเร็จ');
   } catch (e) {
     setError(err(e));
@@ -172,6 +174,7 @@ async function deleteSession() {
     if (e) throw e;
     setEditingSession(false);
     await refresh();
+    onSessionsChange?.(selectedSession.id);
     setMessage(cancel ? 'ยกเลิกคาบเรียนแล้ว (ยังเก็บประวัติเดิม)' : 'คืนสถานะคาบเรียนแล้ว');
   } catch (e) {setError(err(e));} finally {setBusy(false);}
  }

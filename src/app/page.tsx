@@ -32,6 +32,10 @@ export default function Home() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [classroomLocked,setClassroomLocked]=useState(false);
+  const [sessionChange,setSessionChange]=useState<{courseId:number;version:number;sessionId?:number}>({courseId:0,version:0});
+  const handleSessionsChange=useCallback((changedCourseId:number,sessionId?:number)=>{
+    setSessionChange(previous=>({courseId:changedCourseId,version:previous.version+1,sessionId}));
+  },[]);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
   const [signup, setSignup] = useState(false);
@@ -328,12 +332,12 @@ export default function Home() {
           {membersLoading ? <p className={styles.empty}>กำลังโหลดรายชื่อนักศึกษา...</p> : filteredMembers.length === 0 ? <p className={styles.empty}>ไม่พบรายชื่อนักศึกษา</p> : <div className={styles.memberTableWrap}><table className={styles.memberTable}><thead><tr><th>ชื่อ–นามสกุล</th><th>รหัสนักศึกษา</th><th>สถานะ</th><th>การดำเนินการ</th></tr></thead><tbody>{filteredMembers.map(m => <tr key={`${m.course_id}-${m.student_id}`}><td>{m.profiles?.full_name ?? 'ไม่พบข้อมูล'}</td><td>{m.profiles?.student_id ?? '-'}</td><td><span className={styles.pill}>{statusText(m.status)}</span></td><td><div className={styles.actions}><button type="button" className={styles.secondaryButton} onClick={() => setSelectedStudentId(m.student_id)}>รายละเอียด</button>{m.status === 'pending' && <><button type="button" disabled={busy} className={styles.primaryButton} onClick={() => void decide(m.course_id,m.student_id,true)}>อนุมัติ</button><button type="button" disabled={busy} className={styles.dangerButton} onClick={() => void decide(m.course_id,m.student_id,false)}>ปฏิเสธ</button></>}{m.status === 'approved' && <button type="button" disabled={busy} className={styles.dangerButton} onClick={() => void removeStudent(m.course_id,m.student_id)}>นำออก</button>}</div></td></tr>)}</tbody></table></div>}
           {selectedStudent && <div className={styles.studentDetail} role="region" aria-label="รายละเอียดนักศึกษา"><div className={styles.sectionHeading}><h3>ข้อมูลนักศึกษา</h3><button type="button" className={styles.secondaryButton} onClick={() => setSelectedStudentId(null)}>ปิด</button></div><dl className={styles.detailGrid}><dt>ชื่อ–นามสกุล</dt><dd>{selectedStudent.profiles?.full_name ?? '-'}</dd><dt>รหัสนักศึกษา</dt><dd>{selectedStudent.profiles?.student_id ?? '-'}</dd><dt>สถานะในรายวิชา</dt><dd>{statusText(selectedStudent.status)}</dd><dt>รายวิชา</dt><dd>{selectedCourse.code} — {selectedCourse.title}</dd></dl></div>}
           <p className={styles.muted}>แสดงเฉพาะนักศึกษาที่ส่งคำขอเข้าร่วมรายวิชานี้แล้ว · การนำสมาชิกออกต้องได้รับการยืนยัน</p>
-          <AttendancePanel key={selectedCourse.id} courseId={selectedCourse.id} courseCode={selectedCourse.code} teacher={true} onLockChange={setClassroomLocked} />
+          <AttendancePanel key={selectedCourse.id} courseId={selectedCourse.id} courseCode={selectedCourse.code} teacher={true} onLockChange={setClassroomLocked} onSessionsChange={sessionId=>handleSessionsChange(selectedCourse.id,sessionId)} />
                     <TeacherLeaveApproval
             key={`leave-${selectedCourse.id}`}
             courseId={selectedCourse.id}
           />
-          <AttendanceSecurity key={`security-${selectedCourse.id}`} courseId={selectedCourse.id} />
+          <AttendanceSecurity key={`security-${selectedCourse.id}`} courseId={selectedCourse.id} refreshVersion={sessionChange.courseId===selectedCourse.id?sessionChange.version:0} preferredSessionId={sessionChange.courseId===selectedCourse.id?sessionChange.sessionId:undefined} />
           <AttendanceAnalytics key={`analytics-${selectedCourse.id}`} courseId={selectedCourse.id} courseCode={selectedCourse.code} />
         </section>}
       </>}
