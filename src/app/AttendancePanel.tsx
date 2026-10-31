@@ -3,6 +3,8 @@ import {useCallback,useEffect,useMemo,useState} from 'react';
 import {downloadExcel} from '../lib/excel-export';
 import {db} from '../lib/supabase';
 import styles from './attendance.module.css';
+import Pagination from './Pagination';
+import compact from './compact-ui.module.css';
 import SmartAttendanceTeacher from './SmartAttendanceTeacher';
 import {changedAttendance} from '../lib/attendance-utils';
 type Member={student_id:string;status:string;profiles:{full_name:string;student_id:string|null}|null};
@@ -32,6 +34,7 @@ const err = (e: unknown): string => {
   return String(e);
 };
 export default function AttendancePanel({courseId,courseCode,teacher,onLockChange,onSessionsChange}:{courseId:number;courseCode:string;teacher:boolean;onLockChange?:(locked:boolean)=>void;onSessionsChange?:(sessionId?:number)=>void}){
+ const [peopleQuery,setPeopleQuery]=useState(''),[peoplePage,setPeoplePage]=useState(0);
  const [exporting,setExporting]=useState(false);
  const [sessions,setSessions]=useState<Session[]>([]),[members,setMembers]=useState<Member[]>([]),[records,setRecords]=useState<RecordRow[]>([]);
  const [selected,setSelected]=useState<number|null>(null),[date,setDate]=useState(()=>new Date().toLocaleDateString('en-CA')),[topic,setTopic]=useState('');
@@ -284,6 +287,9 @@ async function deleteStudentAttendance(
   const rows=[['รหัสวิชา','วันที่','หัวข้อ','ชื่อ–นามสกุล','รหัสนักศึกษา','สถานะ','หมายเหตุ'],...members.map(m=>{const r=records.find(x=>x.student_id===m.student_id);return[courseCode,selectedSession?.session_date??'',selectedSession?.topic??'',m.profiles?.full_name??'',m.profiles?.student_id??'',r?options.find(x=>x.value===r.status)?.label??'':'ยังไม่บันทึก',r?.note??'']})];
   const url=URL.createObjectURL(new Blob(['\uFEFF'+rows.map(row=>row.map(v=>esc(v)).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=`attendance-${courseCode}-${selectedSession?.session_date??'all'}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
+ useEffect(()=>setPeoplePage(0),[peopleQuery,selected]);
+ const visiblePeople=members.filter(m=>`${m.profiles?.full_name??''} ${m.profiles?.student_id??''}`.toLowerCase().includes(peopleQuery.trim().toLowerCase()));
+ const peopleCurrent=Math.min(peoplePage,Math.max(0,Math.ceil(visiblePeople.length/10)-1));
  return <section className={styles.panel} aria-label="Attendance Management">
   <div className={styles.heading}><div><p className={styles.eyebrow}>CLASSROOM CONTROL</p><h2>ควบคุมคาบเรียนและการเข้าเรียน</h2><p className={styles.sub}>รายวิชา {courseCode} · {teacher?'อาจารย์ผู้สอน':'ประวัติการเข้าเรียนของฉัน'}</p></div>{teacher&&<div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button className={styles.secondary} onClick={()=>void exportExcel()} disabled={!selectedSession||busy||exporting}>{exporting?'กำลังสร้าง Excel...':'ดาวน์โหลด Excel (.xlsx)'}</button><button className={styles.secondary} onClick={exportCsv} disabled={!selectedSession||busy}>ส่งออก CSV</button></div>}</div>
   {error&&<p role="alert" className={styles.error}>{error}</p>}{message&&<p role="status" className={styles.success}>{message}</p>}
@@ -402,8 +408,9 @@ async function deleteStudentAttendance(
    <h3>{teacher?'3. รายชื่อและผลการเข้าเรียน':'ผลการเข้าเรียน'}</h3>
    {recordsLoading&&<p role="status">กำลังโหลดผลการเข้าเรียนของคาบนี้...</p>}
    {dirty&&<p role="status" className={styles.pending}>มีการแก้ไข {dirtyRows.length} รายการที่ยังไม่บันทึก <button type="button" disabled={busy||qrLocked} className={styles.secondary} onClick={()=>setDraft(Object.fromEntries(records.map(r=>[r.student_id,{status:r.status,note:r.note??''}])))}>ยกเลิกการแก้ไข</button></p>}
-   <div className={styles.summary}>{options.map(o=><div key={o.value}><strong>{counts[o.value]}</strong><span>{o.label}</span></div>)}<div><strong>{records.length}</strong><span>บันทึกแล้ว</span></div></div>
+   <div className={styles.summary}>{options.map(o=><div key={o.value}><strong>{counts[o.value]}</strong><span>{o.label}</span></div>)}<div><strong>{records.length}</strong><span>บันทึกแล้ว</span></div><div><strong>{members.filter(m=>!records.some(r=>r.student_id===m.student_id)).length}</strong><span>ยังไม่เช็คชื่อ / ยังไม่บันทึก</span></div></div>
    {teacher?<><div className={styles.toolbar}><strong>นักศึกษาที่อนุมัติแล้ว {members.length} คน</strong><button className={styles.secondary} disabled={busy||qrLocked||recordsLoading||members.length===0||selectedSession?.is_cancelled} onClick={()=>setDraft(Object.fromEntries(members.map(m=>[m.student_id,{status:'present' as Status,note:draft[m.student_id]?.note??''}])))}>ตั้งค่าทั้งหมดเป็นมาเรียน</button></div>
+<label className={compact.search}>ค้นหานักศึกษา<input type="search" value={peopleQuery} onChange={e=>setPeopleQuery(e.target.value)} placeholder="ชื่อหรือรหัสนักศึกษา"/></label>
 <div className={styles.tableWrap}>
   <table>
     <thead>
@@ -417,7 +424,7 @@ async function deleteStudentAttendance(
     </thead>
 
     <tbody>
-      {members.map(m => {
+      {visiblePeople.slice(peopleCurrent*10,peopleCurrent*10+10).map(m => {
         const saved = records.some(
           r => r.student_id === m.student_id
         );
@@ -500,6 +507,7 @@ async function deleteStudentAttendance(
     </tbody>
   </table>
 </div>
+    <Pagination page={peopleCurrent} total={visiblePeople.length} onChange={setPeoplePage}/>
     <button className={styles.primary} disabled={busy||qrLocked||recordsLoading||selectedSession?.is_cancelled||!dirty} onClick={()=>void save()}>{busy?'กำลังบันทึก...':'บันทึกการเข้าเรียน'}</button><p className={styles.sub}>บันทึกเฉพาะแถวที่แก้ไข · ผลจาก QR บันทึกให้อัตโนมัติ ไม่ต้องกดบันทึกซ้ำ · ปิดรับ QR ก่อนแก้ไขรายชื่อ</p></>
    :<div className={styles.tableWrap}><table><thead><tr><th>วันที่</th><th>หัวข้อ</th><th>สถานะของฉัน</th><th>หมายเหตุ</th></tr></thead><tbody>{sessions.map(s=><tr key={s.id}><td>{s.session_date}</td><td>{s.topic||'-'}{s.is_cancelled?' (ยกเลิกแล้ว)':''}</td><td>{options.find(o=>o.value===records.find(r=>r.session_id===s.id)?.status)?.label??(s.id===selected?'ยังไม่บันทึก':'เลือกคาบเรียนเพื่อดู')}</td><td>{s.id===selected?records[0]?.note??'-':'-'}</td></tr>)}</tbody></table></div>}
   </>}

@@ -1,0 +1,3 @@
+ 'use client';
+import styles from './compact-ui.module.css';
+export default function Pagination({page,total,onChange}:{page:number;total:number;onChange:(page:number)=>void}){const pages=Math.max(1,Math.ceil(total/10));return <nav className={styles.pagination} aria-label="แบ่งหน้ารายการ"><span>{total?`${page*10+1}–${Math.min(total,page*10+10)} จาก ${total} รายการ`:'ไม่พบรายการ'}</span><button type="button" disabled={page===0} onClick={()=>onChange(page-1)}>ก่อนหน้า</button><span>หน้า {page+1} / {pages}</span><button type="button" disabled={page>=pages-1} onClick={()=>onChange(page+1)}>ถัดไป</button></nav>}

@@ -4,6 +4,8 @@ import Image from 'next/image';
 import { userMessage } from '../lib/messages';
 import { db } from '../lib/supabase';
 import styles from './dashboard.module.css';
+import compact from './compact-ui.module.css';
+import Pagination from './Pagination';
 import AttendancePanel from './AttendancePanel';
 import AttendanceSecurity from './AttendanceSecurity';
 import AttendanceAnalytics from './AttendanceAnalytics';
@@ -27,6 +29,8 @@ function errorText(value: unknown): string {
 }
 
 export default function Home() {
+  const [workspaceTab,setWorkspaceTab]=useState('attendance');
+  const [memberPage,setMemberPage]=useState(0);
   const [user, setUser] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -220,6 +224,8 @@ export default function Home() {
   const pendingCourseCount = courses.filter(c => c.status === 'pending').length;
   const statusText = (status?: string) => status === 'approved' ? 'อนุมัติแล้ว' : status === 'pending' ? 'รออนุมัติ' : status === 'rejected' ? 'ไม่อนุมัติ' : '';
 
+  useEffect(()=>{setMemberPage(0)},[memberSearch,memberStatus,selectedCourseId]);
+  const memberCurrent=Math.min(memberPage,Math.max(0,Math.ceil(filteredMembers.length/10)-1));
   return <>
     <header className={styles.topbar}>
       <div className={styles.topInner}>
@@ -322,6 +328,8 @@ export default function Home() {
         </section>
         {profile.role === 'teacher' && selectedCourse && <section className={`${styles.card} ${styles.coursesSection}`} id="course-management">
           <div className={styles.sectionHeading}><div><p className={styles.eyebrow}>COURSE MANAGEMENT</p><h2>{selectedCourse.code} — {selectedCourse.title}</h2><p className={styles.muted}>Course ID: {selectedCourse.id} · ภาคเรียน {selectedCourse.term}</p></div><button type="button" className={styles.secondaryButton} onClick={() => {setSelectedCourseId(null);setMembers([]);}}>ปิดรายละเอียด</button></div>
+          <nav className={compact.tabs} aria-label="งานในรายวิชา">{[['attendance','เช็คชื่อ / คาบเรียน'],['members','นักศึกษา'],['leave','คำขอลา'],['security','เหตุการณ์เช็คชื่อ'],['reports','รายงาน']].map(([id,label])=><button key={id} type="button" aria-pressed={workspaceTab===id} onClick={()=>setWorkspaceTab(id)}>{label}</button>)}</nav>
+          <div hidden={workspaceTab!=='members'}>
           <div className={styles.miniStats}><div><strong>{members.filter(m => m.status === 'approved').length}</strong><span>อนุมัติแล้ว</span></div><div><strong>{members.filter(m => m.status === 'pending').length}</strong><span>รออนุมัติ</span></div><div><strong>{members.filter(m => m.status === 'rejected').length}</strong><span>ไม่อนุมัติ</span></div></div>
           <div className={styles.studentTools}>
             <label className={styles.field}>ค้นหานักศึกษา<input type="search" placeholder="ค้นหาชื่อหรือรหัสนักศึกษา" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} /></label>
@@ -329,16 +337,18 @@ export default function Home() {
             <button type="button" className={styles.secondaryButton} disabled={membersLoading || filteredMembers.length === 0} onClick={exportMembers}>ส่งออก CSV (Excel)</button>
           </div>
           <p className={styles.muted}>พบ {filteredMembers.length} รายการ จากทั้งหมด {members.length} รายการ</p>
-          {membersLoading ? <p className={styles.empty}>กำลังโหลดรายชื่อนักศึกษา...</p> : filteredMembers.length === 0 ? <p className={styles.empty}>ไม่พบรายชื่อนักศึกษา</p> : <div className={styles.memberTableWrap}><table className={styles.memberTable}><thead><tr><th>ชื่อ–นามสกุล</th><th>รหัสนักศึกษา</th><th>สถานะ</th><th>การดำเนินการ</th></tr></thead><tbody>{filteredMembers.map(m => <tr key={`${m.course_id}-${m.student_id}`}><td>{m.profiles?.full_name ?? 'ไม่พบข้อมูล'}</td><td>{m.profiles?.student_id ?? '-'}</td><td><span className={styles.pill}>{statusText(m.status)}</span></td><td><div className={styles.actions}><button type="button" className={styles.secondaryButton} onClick={() => setSelectedStudentId(m.student_id)}>รายละเอียด</button>{m.status === 'pending' && <><button type="button" disabled={busy} className={styles.primaryButton} onClick={() => void decide(m.course_id,m.student_id,true)}>อนุมัติ</button><button type="button" disabled={busy} className={styles.dangerButton} onClick={() => void decide(m.course_id,m.student_id,false)}>ปฏิเสธ</button></>}{m.status === 'approved' && <button type="button" disabled={busy} className={styles.dangerButton} onClick={() => void removeStudent(m.course_id,m.student_id)}>นำออก</button>}</div></td></tr>)}</tbody></table></div>}
+          {membersLoading ? <p className={styles.empty}>กำลังโหลดรายชื่อนักศึกษา...</p> : filteredMembers.length === 0 ? <p className={styles.empty}>ไม่พบรายชื่อนักศึกษา</p> : <div className={styles.memberTableWrap}><table className={styles.memberTable}><thead><tr><th>ชื่อ–นามสกุล</th><th>รหัสนักศึกษา</th><th>สถานะ</th><th>การดำเนินการ</th></tr></thead><tbody>{filteredMembers.slice(memberCurrent*10,memberCurrent*10+10).map(m => <tr key={`${m.course_id}-${m.student_id}`}><td>{m.profiles?.full_name ?? 'ไม่พบข้อมูล'}</td><td>{m.profiles?.student_id ?? '-'}</td><td><span className={styles.pill}>{statusText(m.status)}</span></td><td><div className={styles.actions}><button type="button" className={styles.secondaryButton} onClick={() => setSelectedStudentId(m.student_id)}>รายละเอียด</button>{m.status === 'pending' && <><button type="button" disabled={busy} className={styles.primaryButton} onClick={() => void decide(m.course_id,m.student_id,true)}>อนุมัติ</button><button type="button" disabled={busy} className={styles.dangerButton} onClick={() => void decide(m.course_id,m.student_id,false)}>ปฏิเสธ</button></>}{m.status === 'approved' && <button type="button" disabled={busy} className={styles.dangerButton} onClick={() => void removeStudent(m.course_id,m.student_id)}>นำออก</button>}</div></td></tr>)}</tbody></table></div>}
+          <Pagination page={memberCurrent} total={filteredMembers.length} onChange={setMemberPage}/>
           {selectedStudent && <div className={styles.studentDetail} role="region" aria-label="รายละเอียดนักศึกษา"><div className={styles.sectionHeading}><h3>ข้อมูลนักศึกษา</h3><button type="button" className={styles.secondaryButton} onClick={() => setSelectedStudentId(null)}>ปิด</button></div><dl className={styles.detailGrid}><dt>ชื่อ–นามสกุล</dt><dd>{selectedStudent.profiles?.full_name ?? '-'}</dd><dt>รหัสนักศึกษา</dt><dd>{selectedStudent.profiles?.student_id ?? '-'}</dd><dt>สถานะในรายวิชา</dt><dd>{statusText(selectedStudent.status)}</dd><dt>รายวิชา</dt><dd>{selectedCourse.code} — {selectedCourse.title}</dd></dl></div>}
           <p className={styles.muted}>แสดงเฉพาะนักศึกษาที่ส่งคำขอเข้าร่วมรายวิชานี้แล้ว · การนำสมาชิกออกต้องได้รับการยืนยัน</p>
-          <AttendancePanel key={selectedCourse.id} courseId={selectedCourse.id} courseCode={selectedCourse.code} teacher={true} onLockChange={setClassroomLocked} onSessionsChange={sessionId=>handleSessionsChange(selectedCourse.id,sessionId)} />
-                    <TeacherLeaveApproval
+          </div>
+          <div hidden={workspaceTab!=='attendance'}><AttendancePanel key={selectedCourse.id} courseId={selectedCourse.id} courseCode={selectedCourse.code} teacher={true} onLockChange={setClassroomLocked} onSessionsChange={sessionId=>handleSessionsChange(selectedCourse.id,sessionId)} />
+          </div><div hidden={workspaceTab!=='leave'}><TeacherLeaveApproval
             key={`leave-${selectedCourse.id}`}
             courseId={selectedCourse.id}
           />
-          <AttendanceSecurity key={`security-${selectedCourse.id}`} courseId={selectedCourse.id} refreshVersion={sessionChange.courseId===selectedCourse.id?sessionChange.version:0} preferredSessionId={sessionChange.courseId===selectedCourse.id?sessionChange.sessionId:undefined} />
-          <AttendanceAnalytics key={`analytics-${selectedCourse.id}`} courseId={selectedCourse.id} courseCode={selectedCourse.code} />
+          </div><div hidden={workspaceTab!=='security'}><AttendanceSecurity key={`security-${selectedCourse.id}`} courseId={selectedCourse.id} refreshVersion={sessionChange.courseId===selectedCourse.id?sessionChange.version:0} preferredSessionId={sessionChange.courseId===selectedCourse.id?sessionChange.sessionId:undefined} />
+          </div><div hidden={workspaceTab!=='reports'}><AttendanceAnalytics key={`analytics-${selectedCourse.id}`} courseId={selectedCourse.id} courseCode={selectedCourse.code} /></div>
         </section>}
       </>}
       <footer className={styles.footer}>ME-Smart · Mechanical Engineering · RMUTK · ข้อมูลส่วนบุคคลใช้เพื่อการเรียนการสอนเท่านั้น</footer>
