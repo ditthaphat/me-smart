@@ -18,6 +18,23 @@ type Enrollment = { course_id: number; student_id: string; status: string; profi
 type Approved = { course_id: number; student_id: string };
 type CourseMember = Enrollment;
 
+const teacherTabs = [
+  { id: 'overview', label: 'ภาพรวม', icon: '⌂' },
+  { id: 'courses', label: 'รายวิชา / เช็กชื่อ', icon: '▤' },
+  { id: 'advising', label: 'ที่ปรึกษา', icon: '♧' },
+  { id: 'research', label: 'งานวิจัย', icon: '⚗' },
+  { id: 'materials', label: 'เอกสารการสอน', icon: '▧' },
+  { id: 'planner', label: 'งาน / ปฏิทิน', icon: '▦' },
+] as const;
+type TeacherTab = (typeof teacherTabs)[number]['id'];
+
+const futureTeacherAreas: { id: TeacherTab; title: string; description: string }[] = [
+  { id: 'advising', title: 'งานอาจารย์ที่ปรึกษา', description: 'พื้นที่สำหรับดูแลนักศึกษาในความรับผิดชอบ บันทึกการนัดหมายและติดตามผล' },
+  { id: 'research', title: 'งานวิจัย', description: 'พื้นที่สำหรับติดตามโครงการวิจัย เอกสาร และกำหนดส่งที่เกี่ยวข้อง' },
+  { id: 'materials', title: 'เอกสารการสอน', description: 'พื้นที่สำหรับจัดการแผนการสอน บทเรียน ตำรา และแบบฝึกหัด' },
+  { id: 'planner', title: 'งานและปฏิทิน', description: 'พื้นที่สำหรับติดตามงาน นัดหมาย และกำหนดการสำคัญ' },
+];
+
 function errorText(value: unknown): string {
   if (value instanceof Error) return value.message;
   if (typeof value === 'string') return value;
@@ -29,6 +46,7 @@ function errorText(value: unknown): string {
 }
 
 export default function Home() {
+  const [teacherTab, setTeacherTab] = useState<TeacherTab>('overview');
   const [workspaceTab,setWorkspaceTab]=useState('attendance');
   const [memberPage,setMemberPage]=useState(0);
   const [user, setUser] = useState<string | null>(null);
@@ -127,6 +145,26 @@ export default function Home() {
     finally { setMembersLoading(false); }
   };
 
+  function selectTeacherTab(next: TeacherTab): boolean {
+    if (next === teacherTab) return true;
+    if (classroomLocked && teacherTab === 'courses') {
+      setError('กรุณากลับไปที่ เช็กชื่อ / คาบเรียน แล้วปิดรับ QR และบันทึกหรือยกเลิกการแก้ไขก่อนเปลี่ยนเมนู');
+      return false;
+    }
+    setError('');
+    setTeacherTab(next);
+    return true;
+  }
+
+  function closeCourse() {
+    if (classroomLocked) {
+      setError('กรุณาปิดรับ QR และบันทึกหรือยกเลิกการแก้ไขก่อนปิดรายละเอียดรายวิชา');
+      return;
+    }
+    setSelectedCourseId(null);
+    setMembers([]);
+  }
+
   async function run(action: () => Promise<void>) {
     setBusy(true); setError(''); setMsg('');
     try { await action(); } catch (e) { setError(errorText(e)); }
@@ -188,6 +226,7 @@ export default function Home() {
       const { error: e } = await db().auth.signOut();
       if (e) throw e;
       setUser(null); setProfile(null); setCourses([]); setRequests([]); setApproved([]); setSelectedCourseId(null); setMembers([]);
+      setTeacherTab('overview'); setWorkspaceTab('attendance');
     });
   }
 
@@ -274,31 +313,45 @@ export default function Home() {
               <span className={styles.pill}>อาจารย์ผู้สอน</span>
             </div>
           </section>
+          <nav className={styles.teacherTabs} role="tablist" aria-label="พื้นที่ทำงานของอาจารย์">
+            {teacherTabs.map((tab, index) => <button
+              key={tab.id}
+              id={`teacher-tab-${tab.id}`}
+              type="button"
+              role="tab"
+              aria-selected={teacherTab === tab.id}
+              aria-controls={`teacher-panel-${tab.id}`}
+              tabIndex={teacherTab === tab.id ? 0 : -1}
+              onClick={() => selectTeacherTab(tab.id)}
+              onKeyDown={event => {
+                if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft' && event.key !== 'Home' && event.key !== 'End') return;
+                event.preventDefault();
+                const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? teacherTabs.length - 1 :
+                  (index + (event.key === 'ArrowRight' ? 1 : -1) + teacherTabs.length) % teacherTabs.length;
+                const next = teacherTabs[nextIndex];
+                if (selectTeacherTab(next.id)) document.getElementById(`teacher-tab-${next.id}`)?.focus();
+              }}
+            ><span className={styles.teacherTabIcon} aria-hidden="true">{tab.icon}</span>{tab.label}</button>)}
+          </nav>
+          <div id="teacher-panel-overview" role="tabpanel" aria-labelledby="teacher-tab-overview" hidden={teacherTab !== 'overview'}>
           <div className={styles.stats}>
             <article className={styles.statCard}><div className={styles.statIcon}>📚</div><p>รายวิชาทั้งหมด</p><strong>{courses.length}</strong><span>รายวิชาที่สร้างแล้ว</span></article>
             <article className={styles.statCard}><div className={styles.statIcon}>👥</div><p>นักศึกษาที่อนุมัติ</p><strong>{uniqueStudents}</strong><span>นับนักศึกษาไม่ซ้ำกัน</span></article>
             <article className={styles.statCard}><div className={styles.statIcon}>🕒</div><p>คำขอรออนุมัติ</p><strong>{requests.length}</strong><span>รายการที่รอพิจารณา</span></article>
           </div>
-          <div className={styles.twoColumns}>
-            <section className={styles.card}>
-              <div className={styles.sectionHeading}><h2>สร้างรายวิชา</h2><span className={styles.pill}>Course Setup</span></div>
-              <form onSubmit={e => { e.preventDefault(); void createCourse(); }}>
-                <label className={styles.field}>รหัสวิชา<input required value={code} onChange={e => setCode(e.target.value)} placeholder="ME301" /></label>
-                <label className={styles.field}>ชื่อวิชา<input required value={title} onChange={e => setTitle(e.target.value)} placeholder="Fluid Mechanics" /></label>
-                <label className={styles.field}>ภาคเรียน<input required value={term} onChange={e => setTerm(e.target.value)} /></label>
-                <label className={styles.field}>รหัสเข้าร่วม (อย่างน้อย 8 ตัวอักษร)<input required minLength={8} type="password" autoComplete="off" value={joinCode} onChange={e => setJoinCode(e.target.value)} placeholder="ตั้งรหัสที่เดายาก" /></label>
-                <button className={styles.primaryButton} disabled={busy} type="submit">+ สร้างรายวิชา</button>
-              </form>
-            </section>
-            <section className={styles.card}>
-              <div className={styles.sectionHeading}><h2>คำขอเข้าร่วมที่รออนุมัติ</h2><span className={styles.count}>{requests.length}</span></div>
-              {requests.length === 0 ? <p className={styles.empty}>ยังไม่มีคำขอเข้าร่วม</p> : requests.map(r => <div className={styles.listItem} key={`${r.course_id}-${r.student_id}`}>
-                <strong>{r.profiles?.full_name ?? r.student_id}</strong>
-                <p className={styles.muted}>รหัสนักศึกษา: {r.profiles?.student_id ?? '-'} · Course ID: {r.course_id}</p>
-                <div className={styles.actions}><button type="button" disabled={busy} className={styles.primaryButton} onClick={() => decide(r.course_id, r.student_id, true)}>อนุมัติ</button><button type="button" disabled={busy} className={styles.dangerButton} onClick={() => decide(r.course_id, r.student_id, false)}>ปฏิเสธ</button></div>
-              </div>)}
-            </section>
+          <section className={`${styles.card} ${styles.overviewCard}`}>
+            <div><p className={styles.eyebrow}>COURSE WORKSPACE</p><h2>จัดการการเรียนการสอน</h2><p className={styles.muted}>เข้าสู่รายวิชา เช็กชื่อ ตรวจคำขอเข้าร่วม และดูรายงานการเข้าเรียน</p></div>
+            <button type="button" className={styles.primaryButton} onClick={() => selectTeacherTab('courses')}>ไปที่รายวิชา / เช็กชื่อ →</button>
+          </section>
           </div>
+          {futureTeacherAreas.map(area => <div key={area.id} id={`teacher-panel-${area.id}`} role="tabpanel" aria-labelledby={`teacher-tab-${area.id}`} hidden={teacherTab !== area.id}>
+            <section className={`${styles.card} ${styles.futureCard}`}>
+              <span className={styles.futureBadge}>กำลังพัฒนา</span>
+              <h2>{area.title}</h2>
+              <p className={styles.muted}>{area.description}</p>
+              <p className={styles.futureNote}>ขณะนี้ยังไม่สามารถบันทึกข้อมูลในส่วนนี้ได้</p>
+            </section>
+          </div>)}
         </> : <>
           <section className={styles.studentHero}><div><p className={styles.eyebrow}>STUDENT DASHBOARD</p><h2>{profile.full_name}</h2><p>รหัสนักศึกษา: {profile.student_id ?? '-'}</p></div><span className={styles.pill}>นักศึกษา</span></section>
           <div className={styles.stats}>
@@ -318,6 +371,32 @@ export default function Home() {
             courses={courses.filter(c => c.status === 'approved')}
           />
         </>}
+        <div
+          id={profile.role === 'teacher' ? 'teacher-panel-courses' : undefined}
+          role={profile.role === 'teacher' ? 'tabpanel' : undefined}
+          aria-labelledby={profile.role === 'teacher' ? 'teacher-tab-courses' : undefined}
+          hidden={profile.role === 'teacher' && teacherTab !== 'courses'}
+        >
+        {profile.role === 'teacher' && <div className={styles.twoColumns}>
+          <section className={styles.card}>
+            <div className={styles.sectionHeading}><h2>สร้างรายวิชา</h2><span className={styles.pill}>Course Setup</span></div>
+            <form onSubmit={e => { e.preventDefault(); void createCourse(); }}>
+              <label className={styles.field}>รหัสวิชา<input required value={code} onChange={e => setCode(e.target.value)} placeholder="ME301" /></label>
+              <label className={styles.field}>ชื่อวิชา<input required value={title} onChange={e => setTitle(e.target.value)} placeholder="Fluid Mechanics" /></label>
+              <label className={styles.field}>ภาคเรียน<input required value={term} onChange={e => setTerm(e.target.value)} /></label>
+              <label className={styles.field}>รหัสเข้าร่วม (อย่างน้อย 8 ตัวอักษร)<input required minLength={8} type="password" autoComplete="off" value={joinCode} onChange={e => setJoinCode(e.target.value)} placeholder="ตั้งรหัสที่เดายาก" /></label>
+              <button className={styles.primaryButton} disabled={busy} type="submit">+ สร้างรายวิชา</button>
+            </form>
+          </section>
+          <section className={styles.card}>
+            <div className={styles.sectionHeading}><h2>คำขอเข้าร่วมที่รออนุมัติ</h2><span className={styles.count}>{requests.length}</span></div>
+            {requests.length === 0 ? <p className={styles.empty}>ยังไม่มีคำขอเข้าร่วม</p> : requests.map(r => <div className={styles.listItem} key={`${r.course_id}-${r.student_id}`}>
+              <strong>{r.profiles?.full_name ?? r.student_id}</strong>
+              <p className={styles.muted}>รหัสนักศึกษา: {r.profiles?.student_id ?? '-'} · Course ID: {r.course_id}</p>
+              <div className={styles.actions}><button type="button" disabled={busy} className={styles.primaryButton} onClick={() => decide(r.course_id, r.student_id, true)}>อนุมัติ</button><button type="button" disabled={busy} className={styles.dangerButton} onClick={() => decide(r.course_id, r.student_id, false)}>ปฏิเสธ</button></div>
+            </div>)}
+          </section>
+        </div>}
         <section className={`${styles.card} ${styles.coursesSection}`}>
           <div className={styles.sectionHeading}><h2>{profile.role === 'teacher' ? 'รายวิชาของอาจารย์' : 'รายวิชาของฉัน'}</h2><span className={styles.count}>{courses.length}</span></div>
           {courses.length === 0 ? <p className={styles.empty}>ยังไม่มีรายวิชา</p> : <div className={styles.courseGrid}>{courses.map(c => <article className={styles.courseTile} key={c.id}>
@@ -327,7 +406,7 @@ export default function Home() {
           </article>)}</div>}
         </section>
         {profile.role === 'teacher' && selectedCourse && <section className={`${styles.card} ${styles.coursesSection}`} id="course-management">
-          <div className={styles.sectionHeading}><div><p className={styles.eyebrow}>COURSE MANAGEMENT</p><h2>{selectedCourse.code} — {selectedCourse.title}</h2><p className={styles.muted}>Course ID: {selectedCourse.id} · ภาคเรียน {selectedCourse.term}</p></div><button type="button" className={styles.secondaryButton} onClick={() => {setSelectedCourseId(null);setMembers([]);}}>ปิดรายละเอียด</button></div>
+          <div className={styles.sectionHeading}><div><p className={styles.eyebrow}>COURSE MANAGEMENT</p><h2>{selectedCourse.code} — {selectedCourse.title}</h2><p className={styles.muted}>Course ID: {selectedCourse.id} · ภาคเรียน {selectedCourse.term}</p></div><button type="button" className={styles.secondaryButton} onClick={closeCourse}>ปิดรายละเอียด</button></div>
           <nav className={compact.tabs} aria-label="งานในรายวิชา">{[['attendance','เช็คชื่อ / คาบเรียน'],['members','นักศึกษา'],['leave','คำขอลา'],['security','เหตุการณ์เช็คชื่อ'],['reports','รายงาน']].map(([id,label])=><button key={id} type="button" aria-pressed={workspaceTab===id} onClick={()=>setWorkspaceTab(id)}>{label}</button>)}</nav>
           <div hidden={workspaceTab!=='members'}>
           <div className={styles.miniStats}><div><strong>{members.filter(m => m.status === 'approved').length}</strong><span>อนุมัติแล้ว</span></div><div><strong>{members.filter(m => m.status === 'pending').length}</strong><span>รออนุมัติ</span></div><div><strong>{members.filter(m => m.status === 'rejected').length}</strong><span>ไม่อนุมัติ</span></div></div>
@@ -350,6 +429,7 @@ export default function Home() {
           </div><div hidden={workspaceTab!=='security'}><AttendanceSecurity key={`security-${selectedCourse.id}`} courseId={selectedCourse.id} refreshVersion={sessionChange.courseId===selectedCourse.id?sessionChange.version:0} preferredSessionId={sessionChange.courseId===selectedCourse.id?sessionChange.sessionId:undefined} />
           </div><div hidden={workspaceTab!=='reports'}><AttendanceAnalytics key={`analytics-${selectedCourse.id}`} courseId={selectedCourse.id} courseCode={selectedCourse.code} /></div>
         </section>}
+        </div>
       </>}
       <footer className={styles.footer}>ME-Smart · Mechanical Engineering · RMUTK · ข้อมูลส่วนบุคคลใช้เพื่อการเรียนการสอนเท่านั้น</footer>
     </main>
