@@ -84,6 +84,13 @@ test('teacher creates a group, roster, meeting and saved attendance without forg
   const status = root.findByProps({ 'aria-label': 'สถานะ นักศึกษาตัวอย่าง ก' });
   await change(status, 'present');
   assert.equal(records.advising_participants.find(row => row.student_number_snapshot === 'S001').attendance_status, 'present');
+  const absent = root.findByProps({ 'aria-label': 'สถานะ นักศึกษาตัวอย่าง ข' });
+  await change(absent, 'absent');
+  const printedNumbers = () => root.findByProps({ id: 'advising-print' }).findAllByType('tbody')
+    .flatMap(body => body.findAllByType('tr')).map(row => row.findAllByType('td')[1].children.join(''));
+  assert.deepEqual(printedNumbers(), ['S001']);
+  await change(absent, 'not_recorded');
+  assert.deepEqual(printedNumbers(), ['S001']);
   const text = JSON.stringify(renderer.toJSON());
   assert.match(text, /ไม่ใช่ลายมือชื่อ/);
   await click(findButton(root, 'เพิ่มรายชื่อจากกลุ่ม'));
