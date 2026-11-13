@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/attendance.test.cjs"
+    "test": "node --test"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.0",
@@ -19,6 +19,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.16",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
