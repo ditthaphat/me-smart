@@ -6,25 +6,25 @@ import {userMessage} from '../lib/messages';
 import {countdown,qrLink,validateWindow} from '../lib/attendance-utils';
 import styles from './smart-attendance.module.css';
 type Session={id:number;session_date:string;topic:string;is_cancelled:boolean};
-type WindowRow={is_open:boolean;closes_at:string;late_after_minutes:number;require_location:boolean;latitude:number|null;longitude:number|null;radius_m:number;finalized_at:string|null};
+type WindowRow={is_open:boolean;closes_at:string;late_after_minutes:number;require_location:boolean;latitude:number|null;longitude:number|null;radius_m:number};
 export default function SmartAttendanceTeacher({session,courseCode,onLockChange,disabled=false}:{session:Session;courseCode:string;onLockChange:(locked:boolean)=>void;disabled?:boolean}) {
  const [minutes,setMinutes]=useState(15),[late,setLate]=useState(10),[gps,setGps]=useState(false),[lat,setLat]=useState(''),[lng,setLng]=useState(''),[radius,setRadius]=useState(150);
- const [open,setOpen]=useState(false),[finalized,setFinalized]=useState(false),[ends,setEnds]=useState(''),[token,setToken]=useState(''),[expires,setExpires]=useState(0),[now,setNow]=useState(0);
+ const [open,setOpen]=useState(false),[ends,setEnds]=useState(''),[token,setToken]=useState(''),[expires,setExpires]=useState(0),[now,setNow]=useState(0);
  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[info,setInfo]=useState(''),[checked,setChecked]=useState<number|null>(null),[expanded,setExpanded]=useState(false),[origin,setOrigin]=useState('');
- const epoch=useRef(0),action=useRef(false),panel=useRef<HTMLElement>(null),expandButton=useRef<HTMLButtonElement>(null),refreshQr=useRef<(() => void)|null>(null);
+ const epoch=useRef(0),action=useRef(false),panel=useRef<HTMLElement>(null),expandButton=useRef<HTMLButtonElement>(null);
  const sid=session.id;
  useEffect(()=>{setOrigin(window.location.origin);setNow(Date.now());const t=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(t)},[]);
  useEffect(()=>{onLockChange(open||busy||loading);return()=>onLockChange(false)},[open,busy,loading,onLockChange]);
  const readWindow=useCallback(async()=>{
-  const {data,error:e}=await db().from('smart_attendance_windows').select('is_open,closes_at,late_after_minutes,require_location,latitude,longitude,radius_m,finalized_at').eq('session_id',sid).maybeSingle();
+  const {data,error:e}=await db().from('smart_attendance_windows').select('is_open,closes_at,late_after_minutes,require_location,latitude,longitude,radius_m').eq('session_id',sid).maybeSingle();
   if(e)throw e;return data as WindowRow|null;
  },[sid]);
  const applyWindow=useCallback((w:WindowRow|null)=>{
-  const isOpen=Boolean(w?.is_open&&Date.parse(w.closes_at)>Date.now());setOpen(isOpen);setFinalized(Boolean(w?.finalized_at));setEnds(w?.closes_at??'');
+  const isOpen=Boolean(w?.is_open&&Date.parse(w.closes_at)>Date.now());setOpen(isOpen);setEnds(w?.closes_at??'');
   if(w){setLate(w.late_after_minutes);setGps(w.require_location);setLat(w.latitude===null?'':String(w.latitude));setLng(w.longitude===null?'':String(w.longitude));setRadius(w.radius_m)}
   if(!isOpen){setToken('');setExpanded(false)}
  },[]);
- useEffect(()=>{const version=++epoch.current;setToken('');setOpen(false);setFinalized(false);setEnds('');setChecked(null);setError('');setInfo('');setLoading(true);
+ useEffect(()=>{const version=++epoch.current;setToken('');setOpen(false);setEnds('');setChecked(null);setError('');setInfo('');setLoading(true);
   if(session.is_cancelled){setLoading(false);return}
   void readWindow().then(w=>{if(epoch.current===version)applyWindow(w)}).catch(e=>{if(epoch.current===version)setError(userMessage(e))}).finally(()=>{if(epoch.current===version)setLoading(false)});
   return()=>{epoch.current++};
@@ -33,22 +33,14 @@ export default function SmartAttendanceTeacher({session,courseCode,onLockChange,
  useEffect(()=>{if(!open||session.is_cancelled)return;let active=true,inFlight=false;
   const rotate=async()=>{if(inFlight)return;inFlight=true;setToken('');const requestedAt=Date.now();try{const {data,error:e}=await db().rpc('smart_rotate_qr',{p_session_id:sid});if(!active)return;if(e)throw e;if(typeof data!=='string'||!data)throw Error('สร้าง QR ไม่สำเร็จ');if(Date.now()>=requestedAt+29000){setToken('');return}setToken(data);setExpires(requestedAt+29000);setError('')}
    catch(e){if(!active)return;setToken('');setError(userMessage(e));if(/closed|cancelled|authorized/i.test(userMessage(e))){setOpen(false);setExpanded(false)}}finally{inFlight=false}};
-  const showFresh=()=>{setNow(Date.now());setToken('');void rotate()};
-  const visibilityChanged=()=>{if(document.visibilityState==='visible')showFresh();else setToken('')};
-  const pageShown=()=>{if(document.visibilityState==='visible')showFresh()};
-  refreshQr.current=showFresh;
-  if(document.visibilityState==='visible')showFresh();
-  const t=setInterval(()=>{if(document.visibilityState==='visible')void rotate()},20000);
-  document.addEventListener('visibilitychange',visibilityChanged);
-  window.addEventListener('pageshow',pageShown);
-  return()=>{active=false;refreshQr.current=null;clearInterval(t);document.removeEventListener('visibilitychange',visibilityChanged);window.removeEventListener('pageshow',pageShown)};
+  void rotate();const t=setInterval(()=>void rotate(),20000);return()=>{active=false;clearInterval(t)};
  },[open,sid,session.is_cancelled]);
  useEffect(()=>{let active=true,inFlight=false;const poll=async()=>{if(inFlight)return;inFlight=true;try{const {count,error:e}=await db().from('attendance_records').select('student_id',{count:'exact',head:true}).eq('session_id',sid).in('status',['present','late']);if(!active)return;if(e)throw e;setChecked(count??0)}catch{if(active)setChecked(null)}finally{inFlight=false}};void poll();const t=open?setInterval(()=>void poll(),5000):undefined;return()=>{active=false;if(t)clearInterval(t)}},[sid,open]);
  useEffect(()=>{if(!expanded)return;const previous=document.activeElement as HTMLElement|null;const overflow=document.body.style.overflow;document.body.style.overflow='hidden';expandButton.current?.focus();
   const key=(e:KeyboardEvent)=>{if(e.key==='Escape')setExpanded(false);if(e.key==='Tab'){e.preventDefault();expandButton.current?.focus()}};window.addEventListener('keydown',key);
   return()=>{document.body.style.overflow=overflow;window.removeEventListener('keydown',key);previous?.focus()};
  },[expanded]);
- async function start(){if(action.current||disabled||finalized||session.is_cancelled)return;const invalid=validateWindow(minutes,late,gps,lat,lng,radius);if(invalid){setError(invalid);return}action.current=true;setBusy(true);setError('');setInfo('');const version=epoch.current;
+ async function start(){if(action.current||disabled||session.is_cancelled)return;const invalid=validateWindow(minutes,late,gps,lat,lng,radius);if(invalid){setError(invalid);return}action.current=true;setBusy(true);setError('');setInfo('');const version=epoch.current;
   try{const {error:e}=await db().rpc('smart_start_window',{p_session_id:sid,p_minutes:minutes,p_late_minutes:late,p_require_location:gps,p_lat:gps?Number(lat):null,p_lng:gps?Number(lng):null,p_radius:radius});if(e)throw e;
    // Keep the session locked if the write succeeded but the subsequent read fails.
    if(epoch.current!==version)return;setEnds(new Date(Date.now()+minutes*60000).toISOString());setOpen(true);
@@ -64,19 +56,17 @@ export default function SmartAttendanceTeacher({session,courseCode,onLockChange,
   {session.is_cancelled?<p className={styles.note}>คาบนี้ยกเลิกแล้ว ไม่สามารถเปิด QR ได้</p>:<>
   {origin&&new URL(origin).hostname==='localhost'&&<p className={styles.warning}>กำลังเปิดผ่าน localhost: มือถือเปิด QR นี้ไม่ได้ ให้เปิดหน้าอาจารย์ผ่านที่อยู่ Network ที่ Terminal แสดง หรือใช้เว็บไซต์ HTTPS ก่อนเปิด QR</p>}
   {disabled&&!open&&<p className={styles.note}>กรุณาบันทึกหรือยกเลิกการแก้ไขรายชื่อก่อนเปิด QR</p>}
-  {finalized&&<p role="status" className={styles.warning}>คาบนี้สรุปผลการเข้าเรียนแล้ว จึงไม่สามารถเปิด QR ซ้ำได้ หากต้องการทดสอบอีกครั้งให้สร้างคาบทดสอบใหม่</p>}
   <details open={!open}><summary>ตั้งค่า QR · {minutes} นาที · เริ่มสาย {late} นาที · {gps?`GPS ${radius} เมตร`:"ไม่ตรวจ GPS"}</summary>
-  <fieldset disabled={open||busy||loading||disabled||finalized} className={styles.settings}><legend>ตั้งค่าก่อนเปิดรับ</legend><div className={styles.grid}>
+  <fieldset disabled={open||busy||loading||disabled} className={styles.settings}><legend>ตั้งค่าก่อนเปิดรับ</legend><div className={styles.grid}>
    <label>เปิดรับเช็คชื่อ (นาที)<input type="number" min={1} max={180} value={minutes} onChange={e=>setMinutes(Number(e.target.value))}/></label>
    <label>เริ่มนับสายหลังเปิดรับ (นาที)<input type="number" min={0} max={minutes} value={late} onChange={e=>setLate(Number(e.target.value))}/></label>
   </div><label className={styles.check}><input type="checkbox" checked={gps} onChange={e=>setGps(e.target.checked)}/> ตรวจตำแหน่ง GPS (ใช้ HTTPS)</label>
   {gps&&<div className={styles.grid}><label>ละติจูด<input type="number" step="any" value={lat} onChange={e=>setLat(e.target.value)}/></label><label>ลองจิจูด<input type="number" step="any" value={lng} onChange={e=>setLng(e.target.value)}/></label><label>รัศมี (เมตร)<input type="number" min={30} max={2000} value={radius} onChange={e=>setRadius(Number(e.target.value))}/></label><button type="button" onClick={locate}>ใช้ตำแหน่งปัจจุบัน</button></div>}</fieldset></details>
-  <div className={styles.actions}><button type="button" disabled={open||busy||loading||disabled||finalized} onClick={()=>void start()}>{loading?'กำลังตรวจสถานะคาบ...':busy?'กำลังดำเนินการ...':'เปิดรับเช็คชื่อ'}</button><button type="button" disabled={!open||busy} onClick={()=>void stop()}>ปิดรับเช็คชื่อ</button></div>
+  <div className={styles.actions}><button type="button" disabled={open||busy||loading||disabled} onClick={()=>void start()}>{loading?'กำลังตรวจสถานะคาบ...':busy?'กำลังดำเนินการ...':'เปิดรับเช็คชื่อ'}</button><button type="button" disabled={!open||busy} onClick={()=>void stop()}>ปิดรับเช็คชื่อ</button></div>
   {open&&<div className={expanded?styles.presentation:styles.qr} role={expanded?'dialog':undefined} aria-modal={expanded||undefined} aria-label={expanded?'QR สำหรับแสดงในห้องเรียน':undefined}>
    <p className={styles.presentationTitle}>{courseCode} · {session.topic||'ไม่ระบุหัวข้อ'}</p><span>{session.session_date} · คาบ #{sid}</span>
    {link&&now<expires?<QRCodeSVG value={link} size={expanded?440:256} marginSize={4}/>:<p role="status">กำลังรอ QR ล่าสุด…</p>}
-   <strong className={styles.timer}>เหลือเวลาเปิดรับ {countdown(ends,now)}</strong><strong>มาเรียน / สาย {checked===null?'กำลังตรวจสอบ':`${checked} คน`}</strong><span>เริ่มสายหลังเปิดรับ {late} นาที · {gps?'ตรวจ GPS':'ไม่ตรวจ GPS'}</span><small>{link&&now<expires?`รหัส QR นี้เหลือ ${Math.max(0,Math.ceil((expires-now)/1000))} วินาที · `:''}QR เปลี่ยนทุก 20 วินาที</small>
-   <button type="button" onClick={()=>refreshQr.current?.()}>สร้าง QR ล่าสุด</button>
+   <strong className={styles.timer}>เหลือเวลา {countdown(ends,now)}</strong><strong>มาเรียน / สาย {checked===null?'กำลังตรวจสอบ':`${checked} คน`}</strong><span>เริ่มสายหลังเปิดรับ {late} นาที · {gps?'ตรวจ GPS':'ไม่ตรวจ GPS'}</span><small>QR เปลี่ยนทุก 20 วินาที · สแกนจากหน้าจอปัจจุบัน</small>
    <button ref={expandButton} type="button" onClick={()=>setExpanded(x=>!x)}>{expanded?'กลับหน้าควบคุม (Esc)':'แสดง QR เต็มหน้าจอ'}</button>
   </div>}
   <p className={styles.warning}>{gps?'ตรวจ GPS: V7 อาจขอให้อาจารย์ยืนยันกรณีตำแหน่งไม่ชัดเจน':'ไม่ได้เปิดตรวจ GPS: ผู้ได้รับรูป QR อาจเช็คชื่อจากนอกห้องได้ขณะรหัสยังใช้ได้'}</p>

@@ -13,12 +13,11 @@ globalThis.document = new EventTarget();
 document.visibilityState = 'visible';
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { geolocation: { getCurrentPosition(resolve) { resolve({ coords: { latitude: 13.7, longitude: 100.5, accuracy: 5 } }); } } } });
 let opened = false;
-let finalized = false;
 const rpcCalls = [];
 const session = { id: 123, session_date: '2026-11-16', topic: 'Test', is_cancelled: false };
 function query(table) {
   const result = () => {
-    if (table === 'smart_attendance_windows') return { data: finalized ? { is_open: false, closes_at: new Date(Date.now() - 60000).toISOString(), late_after_minutes: 10, require_location: false, latitude: null, longitude: null, radius_m: 150, finalized_at: new Date().toISOString() } : opened ? { is_open: true, closes_at: new Date(Date.now() + 900000).toISOString(), late_after_minutes: 10, require_location: false, latitude: null, longitude: null, radius_m: 150, finalized_at: null } : null, error: null };
+    if (table === 'smart_attendance_windows') return { data: opened ? { is_open: true, closes_at: new Date(Date.now() + 900000).toISOString(), late_after_minutes: 10, require_location: false, latitude: null, longitude: null, radius_m: 150 } : null, error: null };
     if (table === 'attendance_records') return { data: null, count: 0, error: null };
     if (table === 'attendance_sessions') return { data: { ...session, course_id: 5 }, error: null };
     return { data: null, error: null };
@@ -54,57 +53,14 @@ for (const ext of ['.ts', '.tsx']) require.extensions[ext] = (mod, filename) => 
 };
 const Teacher = require('../src/app/SmartAttendanceTeacher.tsx').default;
 const Checkin = require('../src/app/checkin/page.tsx').default;
-const { qrLink, parseCheckinParams } = require('../src/lib/attendance-utils.ts');
+const { qrLink } = require('../src/lib/attendance-utils.ts');
 Module._load = originalLoad;
 
-test('single-parameter QR link safely encodes and decodes token characters', () => {
+test('QR link keeps the session and token intact', () => {
   const token = 'test.with-characters+%&=';
   const link = new URL(qrLink('https://preview.example', 123, token));
-  assert.equal([...link.searchParams.keys()].length, 1);
-  assert.deepEqual(parseCheckinParams(link.search), { sessionId: 123, token });
-});
-
-test('a finalized attendance session explains why QR cannot reopen', async () => {
-  finalized = true;
-  let teacher;
-  try {
-    const before = rpcCalls.filter(c => c.name === 'smart_start_window').length;
-    await act(async () => { teacher = create(React.createElement(Teacher, { session, courseCode: 'TEST', onLockChange() {} })); });
-    const open = teacher.root.findAllByType('button').find(b => b.children.includes('เปิดรับเช็คชื่อ'));
-    assert.equal(open.props.disabled, true);
-    assert.ok(teacher.root.findAllByProps({ role: 'status' }).some(node => node.children.some(c => typeof c === 'string' && c.includes('สรุปผลการเข้าเรียนแล้ว'))));
-    await act(async () => { open.props.onClick(); });
-    assert.equal(rpcCalls.filter(c => c.name === 'smart_start_window').length, before);
-  } finally {
-    finalized = false;
-    if (teacher) await act(async () => teacher.unmount());
-  }
-});
-
-test('returning to the teacher tab replaces a potentially stale QR', async () => {
-  opened = false;
-  let teacher;
-  try {
-    await act(async () => { teacher = create(React.createElement(Teacher, { session, courseCode: 'TEST', onLockChange() {} })); });
-    const open = teacher.root.findAllByType('button').find(b => b.children.includes('เปิดรับเช็คชื่อ'));
-    await act(async () => { open.props.onClick(); });
-    assert.equal(teacher.root.findAllByProps({ 'data-testid': 'rendered-qr' }).length, 1);
-    const before = rpcCalls.filter(c => c.name === 'smart_rotate_qr').length;
-    document.visibilityState = 'hidden';
-    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
-    assert.equal(teacher.root.findAllByProps({ 'data-testid': 'rendered-qr' }).length, 0);
-    document.visibilityState = 'visible';
-    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
-    assert.equal(rpcCalls.filter(c => c.name === 'smart_rotate_qr').length, before + 1);
-    assert.equal(teacher.root.findAllByProps({ 'data-testid': 'rendered-qr' }).length, 1);
-    const refresh = teacher.root.findAllByType('button').find(b => b.children.includes('สร้าง QR ล่าสุด'));
-    await act(async () => { refresh.props.onClick(); });
-    assert.equal(rpcCalls.filter(c => c.name === 'smart_rotate_qr').length, before + 2);
-  } finally {
-    document.visibilityState = 'visible';
-    opened = false;
-    if (teacher) await act(async () => teacher.unmount());
-  }
+  assert.equal(link.searchParams.get('session'), '123');
+  assert.equal(link.searchParams.get('token'), token);
 });
 
 test('teacher QR supplies both parameters to the student check-in flow', async () => {
@@ -116,8 +72,8 @@ test('teacher QR supplies both parameters to the student check-in flow', async (
     const qr = teacher.root.findByProps({ 'data-testid': 'rendered-qr' }).props['data-value'];
     const link = new URL(qr);
     assert.equal(link.pathname, '/checkin');
-    assert.equal(link.searchParams.get('session'), `${session.id}.synthetic-token`);
-    assert.equal([...link.searchParams.keys()].length, 1);
+    assert.equal(link.searchParams.get('session'), String(session.id));
+    assert.equal(link.searchParams.get('token'), 'synthetic-token');
     window.location.search = link.search;
     await act(async () => { student = create(React.createElement(Checkin)); });
     assert.equal(student.root.findAllByProps({ role: 'alert' }).length, 0);
@@ -136,7 +92,7 @@ test('teacher QR supplies both parameters to the student check-in flow', async (
   }
 });
 
-test('links from the previous version remain valid for student check-in', async () => {
+test('student check-in accepts a link with separate session and token parameters', async () => {
   window.location.search = '?session=123&token=previous-token';
   let student;
   try {

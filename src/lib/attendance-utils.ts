@@ -8,20 +8,9 @@ export function changedAttendance(draft: Record<string, AttendanceDraft>, saved:
 }
 export function qrLink(origin:string, sessionId:number, token:string) {
   const url = new URL('/checkin', origin);
-  // Keep the session and QR token together if an intermediate link handler
-  // removes later query parameters. The server still validates the token.
-  url.searchParams.set('session', `${sessionId}.${token}`);
+  url.searchParams.set('session', String(sessionId));
+  url.searchParams.set('token', token);
   return url.toString();
-}
-export function parseCheckinParams(search:string) {
-  const params = new URLSearchParams(search);
-  const value = params.get('session') ?? '';
-  const separator = value.indexOf('.');
-  if (separator >= 0) {
-    return { sessionId: Number(value.slice(0, separator)), token: value.slice(separator + 1) };
-  }
-  // Accept QR links created by deployments using the previous two-parameter format.
-  return { sessionId: Number(value), token: params.get('token') ?? '' };
 }
 export function countdown(ends:string, now:number) {
   const seconds = Math.max(0, Math.ceil((Date.parse(ends) - now) / 1000) || 0);

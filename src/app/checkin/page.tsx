@@ -2,7 +2,6 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {userMessage} from '../../lib/messages';
 import {db} from '../../lib/supabase';
-import {parseCheckinParams} from '../../lib/attendance-utils';
 import styles from '../smart-attendance.module.css';
 type Saved={status:string;note:string|null};
 type ClassInfo={session_date:string;topic:string;is_cancelled:boolean;course_id:number};
@@ -13,7 +12,7 @@ export default function Checkin(){
  const [busy,setBusy]=useState(false),[result,setResult]=useState(''),[error,setError]=useState(''),[confirmedAt,setConfirmedAt]=useState('');
  const [saved,setSaved]=useState<Saved|null>(null),[context,setContext]=useState<ClassInfo|null>(null),[course,setCourse]=useState(''),[contextLoading,setContextLoading]=useState(false),[contextError,setContextError]=useState('');
  const submitting=useRef(false);
- useEffect(()=>{let active=true;const qr=parseCheckinParams(window.location.search);setSid(qr.sessionId);setToken(qr.token);
+ useEffect(()=>{let active=true;const q=new URLSearchParams(window.location.search);setSid(Number(q.get('session')));setToken(q.get('token')??'');
   void db().auth.getUser().then(({data,error:e})=>{if(!active)return;if(e&&e.name!=='AuthSessionMissingError')setError(userMessage(e));setUserId(data.user?.id??null)}).catch(e=>{if(active)setError(userMessage(e))}).finally(()=>{if(active)setReady(true)});return()=>{active=false};
  },[]);
  const readSaved=useCallback(async()=>{
