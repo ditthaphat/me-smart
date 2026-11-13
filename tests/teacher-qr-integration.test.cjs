@@ -7,7 +7,11 @@ const React = require('react');
 const { create, act } = require('react-test-renderer');
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-globalThis.window = { location: { origin: 'https://test.example' }, confirm: () => true };
+globalThis.window = new EventTarget();
+window.location = { origin: 'https://test.example' };
+window.confirm = () => true;
+globalThis.document = new EventTarget();
+document.visibilityState = 'visible';
 const course = { id: 5, code: '4112203', title: 'Fluid Mechanics', term: '2/2569' };
 const session = { id: 8, course_id: 5, session_date: '2026-11-16', topic: 'Test', is_cancelled: false, cancelled_at: null };
 let opened = false;

@@ -7,7 +7,10 @@ const React = require('react');
 const { create, act } = require('react-test-renderer');
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-globalThis.window = { location: { origin: 'https://preview.example', search: '' } };
+globalThis.window = new EventTarget();
+window.location = { origin: 'https://preview.example', search: '' };
+globalThis.document = new EventTarget();
+document.visibilityState = 'visible';
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { geolocation: { getCurrentPosition(resolve) { resolve({ coords: { latitude: 13.7, longitude: 100.5, accuracy: 5 } }); } } } });
 let opened = false;
 let finalized = false;
@@ -74,6 +77,32 @@ test('a finalized attendance session explains why QR cannot reopen', async () =>
     assert.equal(rpcCalls.filter(c => c.name === 'smart_start_window').length, before);
   } finally {
     finalized = false;
+    if (teacher) await act(async () => teacher.unmount());
+  }
+});
+
+test('returning to the teacher tab replaces a potentially stale QR', async () => {
+  opened = false;
+  let teacher;
+  try {
+    await act(async () => { teacher = create(React.createElement(Teacher, { session, courseCode: 'TEST', onLockChange() {} })); });
+    const open = teacher.root.findAllByType('button').find(b => b.children.includes('เปิดรับเช็คชื่อ'));
+    await act(async () => { open.props.onClick(); });
+    assert.equal(teacher.root.findAllByProps({ 'data-testid': 'rendered-qr' }).length, 1);
+    const before = rpcCalls.filter(c => c.name === 'smart_rotate_qr').length;
+    document.visibilityState = 'hidden';
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    assert.equal(teacher.root.findAllByProps({ 'data-testid': 'rendered-qr' }).length, 0);
+    document.visibilityState = 'visible';
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    assert.equal(rpcCalls.filter(c => c.name === 'smart_rotate_qr').length, before + 1);
+    assert.equal(teacher.root.findAllByProps({ 'data-testid': 'rendered-qr' }).length, 1);
+    const refresh = teacher.root.findAllByType('button').find(b => b.children.includes('สร้าง QR ล่าสุด'));
+    await act(async () => { refresh.props.onClick(); });
+    assert.equal(rpcCalls.filter(c => c.name === 'smart_rotate_qr').length, before + 2);
+  } finally {
+    document.visibilityState = 'visible';
+    opened = false;
     if (teacher) await act(async () => teacher.unmount());
   }
 });

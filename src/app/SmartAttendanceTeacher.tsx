@@ -11,7 +11,7 @@ export default function SmartAttendanceTeacher({session,courseCode,onLockChange,
  const [minutes,setMinutes]=useState(15),[late,setLate]=useState(10),[gps,setGps]=useState(false),[lat,setLat]=useState(''),[lng,setLng]=useState(''),[radius,setRadius]=useState(150);
  const [open,setOpen]=useState(false),[finalized,setFinalized]=useState(false),[ends,setEnds]=useState(''),[token,setToken]=useState(''),[expires,setExpires]=useState(0),[now,setNow]=useState(0);
  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[info,setInfo]=useState(''),[checked,setChecked]=useState<number|null>(null),[expanded,setExpanded]=useState(false),[origin,setOrigin]=useState('');
- const epoch=useRef(0),action=useRef(false),panel=useRef<HTMLElement>(null),expandButton=useRef<HTMLButtonElement>(null);
+ const epoch=useRef(0),action=useRef(false),panel=useRef<HTMLElement>(null),expandButton=useRef<HTMLButtonElement>(null),refreshQr=useRef<(() => void)|null>(null);
  const sid=session.id;
  useEffect(()=>{setOrigin(window.location.origin);setNow(Date.now());const t=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(t)},[]);
  useEffect(()=>{onLockChange(open||busy||loading);return()=>onLockChange(false)},[open,busy,loading,onLockChange]);
@@ -33,7 +33,15 @@ export default function SmartAttendanceTeacher({session,courseCode,onLockChange,
  useEffect(()=>{if(!open||session.is_cancelled)return;let active=true,inFlight=false;
   const rotate=async()=>{if(inFlight)return;inFlight=true;setToken('');const requestedAt=Date.now();try{const {data,error:e}=await db().rpc('smart_rotate_qr',{p_session_id:sid});if(!active)return;if(e)throw e;if(typeof data!=='string'||!data)throw Error('สร้าง QR ไม่สำเร็จ');if(Date.now()>=requestedAt+29000){setToken('');return}setToken(data);setExpires(requestedAt+29000);setError('')}
    catch(e){if(!active)return;setToken('');setError(userMessage(e));if(/closed|cancelled|authorized/i.test(userMessage(e))){setOpen(false);setExpanded(false)}}finally{inFlight=false}};
-  void rotate();const t=setInterval(()=>void rotate(),20000);return()=>{active=false;clearInterval(t)};
+  const showFresh=()=>{setNow(Date.now());setToken('');void rotate()};
+  const visibilityChanged=()=>{if(document.visibilityState==='visible')showFresh();else setToken('')};
+  const pageShown=()=>{if(document.visibilityState==='visible')showFresh()};
+  refreshQr.current=showFresh;
+  if(document.visibilityState==='visible')showFresh();
+  const t=setInterval(()=>{if(document.visibilityState==='visible')void rotate()},20000);
+  document.addEventListener('visibilitychange',visibilityChanged);
+  window.addEventListener('pageshow',pageShown);
+  return()=>{active=false;refreshQr.current=null;clearInterval(t);document.removeEventListener('visibilitychange',visibilityChanged);window.removeEventListener('pageshow',pageShown)};
  },[open,sid,session.is_cancelled]);
  useEffect(()=>{let active=true,inFlight=false;const poll=async()=>{if(inFlight)return;inFlight=true;try{const {count,error:e}=await db().from('attendance_records').select('student_id',{count:'exact',head:true}).eq('session_id',sid).in('status',['present','late']);if(!active)return;if(e)throw e;setChecked(count??0)}catch{if(active)setChecked(null)}finally{inFlight=false}};void poll();const t=open?setInterval(()=>void poll(),5000):undefined;return()=>{active=false;if(t)clearInterval(t)}},[sid,open]);
  useEffect(()=>{if(!expanded)return;const previous=document.activeElement as HTMLElement|null;const overflow=document.body.style.overflow;document.body.style.overflow='hidden';expandButton.current?.focus();
@@ -67,7 +75,8 @@ export default function SmartAttendanceTeacher({session,courseCode,onLockChange,
   {open&&<div className={expanded?styles.presentation:styles.qr} role={expanded?'dialog':undefined} aria-modal={expanded||undefined} aria-label={expanded?'QR สำหรับแสดงในห้องเรียน':undefined}>
    <p className={styles.presentationTitle}>{courseCode} · {session.topic||'ไม่ระบุหัวข้อ'}</p><span>{session.session_date} · คาบ #{sid}</span>
    {link&&now<expires?<QRCodeSVG value={link} size={expanded?440:256} marginSize={4}/>:<p role="status">กำลังรอ QR ล่าสุด…</p>}
-   <strong className={styles.timer}>เหลือเวลา {countdown(ends,now)}</strong><strong>มาเรียน / สาย {checked===null?'กำลังตรวจสอบ':`${checked} คน`}</strong><span>เริ่มสายหลังเปิดรับ {late} นาที · {gps?'ตรวจ GPS':'ไม่ตรวจ GPS'}</span><small>QR เปลี่ยนทุก 20 วินาที · สแกนจากหน้าจอปัจจุบัน</small>
+   <strong className={styles.timer}>เหลือเวลาเปิดรับ {countdown(ends,now)}</strong><strong>มาเรียน / สาย {checked===null?'กำลังตรวจสอบ':`${checked} คน`}</strong><span>เริ่มสายหลังเปิดรับ {late} นาที · {gps?'ตรวจ GPS':'ไม่ตรวจ GPS'}</span><small>{link&&now<expires?`รหัส QR นี้เหลือ ${Math.max(0,Math.ceil((expires-now)/1000))} วินาที · `:''}QR เปลี่ยนทุก 20 วินาที</small>
+   <button type="button" onClick={()=>refreshQr.current?.()}>สร้าง QR ล่าสุด</button>
    <button ref={expandButton} type="button" onClick={()=>setExpanded(x=>!x)}>{expanded?'กลับหน้าควบคุม (Esc)':'แสดง QR เต็มหน้าจอ'}</button>
   </div>}
   <p className={styles.warning}>{gps?'ตรวจ GPS: V7 อาจขอให้อาจารย์ยืนยันกรณีตำแหน่งไม่ชัดเจน':'ไม่ได้เปิดตรวจ GPS: ผู้ได้รับรูป QR อาจเช็คชื่อจากนอกห้องได้ขณะรหัสยังใช้ได้'}</p>
