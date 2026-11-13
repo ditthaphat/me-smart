@@ -10,11 +10,12 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.window = { location: { origin: 'https://preview.example', search: '' } };
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { geolocation: { getCurrentPosition(resolve) { resolve({ coords: { latitude: 13.7, longitude: 100.5, accuracy: 5 } }); } } } });
 let opened = false;
+let finalized = false;
 const rpcCalls = [];
 const session = { id: 123, session_date: '2026-11-16', topic: 'Test', is_cancelled: false };
 function query(table) {
   const result = () => {
-    if (table === 'smart_attendance_windows') return { data: opened ? { is_open: true, closes_at: new Date(Date.now() + 900000).toISOString(), late_after_minutes: 10, require_location: false, latitude: null, longitude: null, radius_m: 150 } : null, error: null };
+    if (table === 'smart_attendance_windows') return { data: finalized ? { is_open: false, closes_at: new Date(Date.now() - 60000).toISOString(), late_after_minutes: 10, require_location: false, latitude: null, longitude: null, radius_m: 150, finalized_at: new Date().toISOString() } : opened ? { is_open: true, closes_at: new Date(Date.now() + 900000).toISOString(), late_after_minutes: 10, require_location: false, latitude: null, longitude: null, radius_m: 150, finalized_at: null } : null, error: null };
     if (table === 'attendance_records') return { data: null, count: 0, error: null };
     if (table === 'attendance_sessions') return { data: { ...session, course_id: 5 }, error: null };
     return { data: null, error: null };
@@ -58,6 +59,23 @@ test('single-parameter QR link safely encodes and decodes token characters', () 
   const link = new URL(qrLink('https://preview.example', 123, token));
   assert.equal([...link.searchParams.keys()].length, 1);
   assert.deepEqual(parseCheckinParams(link.search), { sessionId: 123, token });
+});
+
+test('a finalized attendance session explains why QR cannot reopen', async () => {
+  finalized = true;
+  let teacher;
+  try {
+    const before = rpcCalls.filter(c => c.name === 'smart_start_window').length;
+    await act(async () => { teacher = create(React.createElement(Teacher, { session, courseCode: 'TEST', onLockChange() {} })); });
+    const open = teacher.root.findAllByType('button').find(b => b.children.includes('เปิดรับเช็คชื่อ'));
+    assert.equal(open.props.disabled, true);
+    assert.ok(teacher.root.findAllByProps({ role: 'status' }).some(node => node.children.some(c => typeof c === 'string' && c.includes('สรุปผลการเข้าเรียนแล้ว'))));
+    await act(async () => { open.props.onClick(); });
+    assert.equal(rpcCalls.filter(c => c.name === 'smart_start_window').length, before);
+  } finally {
+    finalized = false;
+    if (teacher) await act(async () => teacher.unmount());
+  }
 });
 
 test('teacher QR supplies both parameters to the student check-in flow', async () => {

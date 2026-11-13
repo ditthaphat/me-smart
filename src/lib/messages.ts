@@ -10,6 +10,7 @@ export function userMessage(error: unknown): string {
     'Check-in denied: class session is cancelled': 'คาบเรียนนี้ยกเลิกแล้ว ไม่สามารถเช็คชื่อได้',
     'Not enrolled in this course': 'บัญชีนี้ยังไม่ได้รับอนุมัติเข้าร่วมรายวิชา',
     'Check-in closed': 'ปิดรับเช็คชื่อแล้ว กรุณาติดต่ออาจารย์',
+    'Attendance already finalized; contact teacher': 'คาบนี้สรุปผลการเข้าเรียนแล้ว จึงเปิด QR ซ้ำไม่ได้ หากต้องการทดสอบอีกครั้งให้สร้างคาบทดสอบใหม่',
     'QR expired or invalid': 'QR หมดอายุหรือไม่ถูกต้อง กรุณาสแกน QR ล่าสุด',
     'Location unavailable or accuracy too low; ask teacher to verify': 'ระบุตำแหน่งไม่ได้หรือพิกัดคลาดเคลื่อนมาก กรุณาให้อาจารย์ตรวจสอบ',
     'Outside classroom zone; ask teacher to verify': 'พิกัดอยู่นอกบริเวณห้องเรียน กรุณาให้อาจารย์ตรวจสอบ',
