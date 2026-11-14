@@ -2,6 +2,7 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {userMessage} from '../../lib/messages';
 import {db} from '../../lib/supabase';
+import {matchesStudentEmail} from '../../lib/student-email';
 import styles from '../smart-attendance.module.css';
 type Saved={status:string;note:string|null};
 type ClassInfo={session_date:string;topic:string;is_cancelled:boolean;course_id:number};
@@ -9,11 +10,17 @@ const statusLabels:Record<string,string>={present:'มาเรียน',late:'
 export default function Checkin(){
  const [sid,setSid]=useState(0),[token,setToken]=useState('');
  const [userId,setUserId]=useState<string|null>(null),[ready,setReady]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState('');
+ const [emailUpgrade,setEmailUpgrade]=useState(false);
  const [busy,setBusy]=useState(false),[result,setResult]=useState(''),[error,setError]=useState(''),[confirmedAt,setConfirmedAt]=useState('');
  const [saved,setSaved]=useState<Saved|null>(null),[context,setContext]=useState<ClassInfo|null>(null),[course,setCourse]=useState(''),[contextLoading,setContextLoading]=useState(false),[contextError,setContextError]=useState('');
  const submitting=useRef(false);
  useEffect(()=>{let active=true;const q=new URLSearchParams(window.location.search);setSid(Number(q.get('session')));setToken(q.get('token')??'');
-  void db().auth.getUser().then(({data,error:e})=>{if(!active)return;if(e&&e.name!=='AuthSessionMissingError')setError(userMessage(e));setUserId(data.user?.id??null)}).catch(e=>{if(active)setError(userMessage(e))}).finally(()=>{if(active)setReady(true)});return()=>{active=false};
+  void (async()=>{try{const {data,error:e}=await db().auth.getUser();if(e&&e.name!=='AuthSessionMissingError')throw e;
+   if(!data.user){if(active)setUserId(null);return}
+   const {data:p,error:pe}=await db().from('profiles').select('role,student_id').eq('id',data.user.id).single();if(pe||!p)throw pe??Error('ไม่พบข้อมูลผู้ใช้');
+   if(!active)return;if(p.role==='student'&&(!matchesStudentEmail(data.user.email,p.student_id)||!data.user.email_confirmed_at)){setEmailUpgrade(true);setUserId(null);return}
+   setEmailUpgrade(false);setUserId(data.user.id);
+  }catch(e){if(active)setError(userMessage(e))}finally{if(active)setReady(true)}})();return()=>{active=false};
  },[]);
  const readSaved=useCallback(async()=>{
   if(!userId)return null;
@@ -29,7 +36,10 @@ export default function Checkin(){
   return()=>{active=false};
  },[userId,sid,readSaved]);
  async function login(e:React.FormEvent){e.preventDefault();if(submitting.current)return;submitting.current=true;setBusy(true);setError('');
-  try{const {data,error:e}=await db().auth.signInWithPassword({email,password});if(e)throw e;setUserId(data.user?.id??null);setPassword('')}catch(e){setError(userMessage(e))}finally{submitting.current=false;setBusy(false)}}
+  try{const {data,error:e}=await db().auth.signInWithPassword({email,password});if(e)throw e;if(!data.user)throw Error('ไม่พบข้อมูลผู้ใช้');
+   const {data:p,error:pe}=await db().from('profiles').select('role,student_id').eq('id',data.user.id).single();if(pe||!p)throw pe??Error('ไม่พบข้อมูลผู้ใช้');
+   if(p.role==='student'&&(!matchesStudentEmail(data.user.email,p.student_id)||!data.user.email_confirmed_at)){setEmailUpgrade(true);setUserId(null)}else{setEmailUpgrade(false);setUserId(data.user.id)}setPassword('')
+  }catch(e){setError(userMessage(e))}finally{submitting.current=false;setBusy(false)}}
  async function submit(){if(submitting.current||saved)return;submitting.current=true;setBusy(true);setError('');setResult('');try{
   if(!Number.isSafeInteger(sid)||sid<=0||!token)throw Error('ลิงก์ QR ไม่ถูกต้อง กรุณาสแกนใหม่');
   // A previous successful write may have lost its response. Read first; never send a duplicate write intentionally.
@@ -48,7 +58,7 @@ export default function Checkin(){
  {context&&<div className={styles.classContext}><strong>{course||`คาบเรียน #${sid}`}</strong><p>{context.session_date} · {context.topic||'ไม่ระบุหัวข้อ'}</p>{context.is_cancelled&&<p>คาบนี้ยกเลิกแล้ว · ประวัติเดิมไม่นับในสถิติ</p>}</div>}
  {error&&<p role="alert" className={styles.error}>{error}</p>}{contextError&&<p role="status" className={styles.warning}>{contextError}</p>}
  {saved&&<div role="status" className={styles.success}><strong>{result||'มีบันทึกการเข้าเรียนแล้ว'}: {statusLabels[saved.status]??saved.status}</strong><p>คาบเรียนหมายเลข {sid}{confirmedAt&&<><br/>เวลาที่ยืนยันผลบนอุปกรณ์: {confirmedAt}</>}</p><p>ไม่ต้องเช็คชื่อซ้ำ หากต้องแก้ไขสถานะกรุณาติดต่ออาจารย์</p><a href="/">กลับไปดูรายวิชาของฉัน</a></div>}
- {!ready?<p>กำลังตรวจสอบบัญชี...</p>:invalid?null:!userId?<form onSubmit={login} className={styles.login}><label>อีเมล<input type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)}/></label><label>รหัสผ่าน<input type="password" autoComplete="current-password" required value={password} onChange={e=>setPassword(e.target.value)}/></label><button disabled={busy}>{busy?'กำลังเข้าสู่ระบบ...':'เข้าสู่ระบบ'}</button></form>:!saved?<button disabled={busy||contextLoading||context?.is_cancelled} onClick={()=>void submit()}>{busy?'กำลังตรวจสอบและบันทึก...':contextLoading?'กำลังตรวจประวัติ...':'ยืนยันการเข้าเรียน'}</button>:null}
+ {!ready?<p>กำลังตรวจสอบบัญชี...</p>:invalid?null:emailUpgrade?<p role="alert" className={styles.warning}>บัญชีนี้ต้องเปลี่ยนและยืนยันอีเมลมหาวิทยาลัยก่อนเช็กชื่อ <a href="/">ไปเปลี่ยนอีเมลในบัญชีเดิม</a></p>:!userId?<form onSubmit={login} className={styles.login}><label>อีเมลมหาวิทยาลัย<input type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)}/></label><label>รหัสผ่าน ME-Smart<input type="password" autoComplete="current-password" required value={password} onChange={e=>setPassword(e.target.value)}/></label><button disabled={busy}>{busy?'กำลังเข้าสู่ระบบ...':'เข้าสู่ระบบ'}</button></form>:!saved?<button disabled={busy||contextLoading||context?.is_cancelled} onClick={()=>void submit()}>{busy?'กำลังตรวจสอบและบันทึก...':contextLoading?'กำลังตรวจประวัติ...':'ยืนยันการเข้าเรียน'}</button>:null}
  <p className={styles.note}>เมื่อกดยืนยัน โทรศัพท์อาจขอใช้ตำแหน่ง ระบบตรวจตามเงื่อนไขของอาจารย์ หาก QR หมดอายุให้สแกนใหม่โดยใช้เบราว์เซอร์เดิม</p>
  </main>;
 }

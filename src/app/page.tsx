@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Image from 'next/image';
 import { userMessage } from '../lib/messages';
 import { db } from '../lib/supabase';
+import { expectedStudentEmail, matchesStudentEmail } from '../lib/student-email';
 import styles from './dashboard.module.css';
 import compact from './compact-ui.module.css';
 import Pagination from './Pagination';
@@ -33,6 +34,8 @@ export default function Home() {
   const [memberPage,setMemberPage]=useState(0);
   const [user, setUser] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [emailUpgrade, setEmailUpgrade] = useState<{ expected: string | null; current: string | null; unconfirmed: boolean } | null>(null);
+  const [newStudentEmail, setNewStudentEmail] = useState('');
   const [initialLoading, setInitialLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [classroomLocked,setClassroomLocked]=useState(false);
@@ -69,7 +72,7 @@ export default function Home() {
       setError('');
       setUser(u?.id ?? null);
       if (!u) {
-        setProfile(null); setCourses([]); setRequests([]); setApproved([]); setSelectedCourseId(null); setMembers([]);
+        setProfile(null); setEmailUpgrade(null); setCourses([]); setRequests([]); setApproved([]); setSelectedCourseId(null); setMembers([]);
         return;
       }
       const { data: p, error: profileError } = await db().from('profiles')
@@ -77,6 +80,14 @@ export default function Home() {
       if (profileError || !p) throw profileError ?? new Error('ไม่พบโปรไฟล์ผู้ใช้');
       const me = p as Profile;
       setProfile(me);
+      if (me.role === 'student' && (!matchesStudentEmail(u.email, me.student_id) || !u.email_confirmed_at)) {
+        const expected = expectedStudentEmail(me.student_id);
+        setEmailUpgrade({ expected, current: u.email ?? null, unconfirmed: !u.email_confirmed_at });
+        setNewStudentEmail(expected ?? '');
+        setCourses([]); setRequests([]); setApproved([]); setSelectedCourseId(null); setMembers([]);
+        return;
+      }
+      setEmailUpgrade(null);
       if (me.role === 'teacher') {
         const [courseResult, requestResult, approvedResult] = await Promise.all([
           db().from('courses').select('id,code,title,term').order('created_at', { ascending: false }),
@@ -137,8 +148,9 @@ export default function Home() {
     await run(async () => {
       if (signup) {
         if (!name.trim() || !studentId.trim()) throw new Error('กรุณากรอกชื่อและรหัสนักศึกษา');
+        if (!matchesStudentEmail(email, studentId)) throw new Error('อีเมลต้องเป็นรหัสนักศึกษาโดยไม่ใส่ขีด ตามด้วย @mail.rmutk.ac.th');
         const { error: e } = await db().auth.signUp({
-          email, password, options: { data: { full_name: name.trim(), student_id: studentId.trim() } },
+          email: email.trim().toLowerCase(), password, options: { data: { full_name: name.trim(), student_id: studentId.trim() } },
         });
         if (e) throw e;
         setMsg('สมัครสำเร็จ โปรดตรวจอีเมลเพื่อยืนยันบัญชี แล้วกลับมาเข้าสู่ระบบ');
@@ -148,6 +160,20 @@ export default function Home() {
         if (e) throw new Error(userMessage(e));
         await load();
       }
+    });
+  }
+  async function requestStudentEmailChange() {
+    await run(async () => {
+      if (!profile || profile.role !== 'student' || !matchesStudentEmail(newStudentEmail, profile.student_id)) {
+        throw new Error('กรุณาระบุอีเมลมหาวิทยาลัยที่ตรงกับรหัสนักศึกษา');
+      }
+      const address=newStudentEmail.trim().toLowerCase();
+      const sameUnconfirmed=emailUpgrade?.unconfirmed && emailUpgrade.current?.toLowerCase()===address;
+      const {error:e}=sameUnconfirmed
+        ? await db().auth.resend({type:'signup',email:address})
+        : await db().auth.updateUser({email:address});
+      if(e)throw e;
+      setMsg(sameUnconfirmed ? 'ส่งคำขอยืนยันอีเมลแล้ว กรุณาตรวจอีเมลมหาวิทยาลัยและดำเนินการตามข้อความที่ได้รับ' : 'ส่งคำขอเปลี่ยนอีเมลแล้ว กรุณาตรวจอีเมลมหาวิทยาลัยและอีเมลเดิมเพื่อยืนยันตามข้อความที่ได้รับ จากนั้นเข้าสู่ระบบอีกครั้ง');
     });
   }
   async function createCourse() {
@@ -187,7 +213,7 @@ export default function Home() {
     await run(async () => {
       const { error: e } = await db().auth.signOut();
       if (e) throw e;
-      setUser(null); setProfile(null); setCourses([]); setRequests([]); setApproved([]); setSelectedCourseId(null); setMembers([]);
+      setUser(null); setProfile(null); setEmailUpgrade(null); setCourses([]); setRequests([]); setApproved([]); setSelectedCourseId(null); setMembers([]);
     });
   }
 
@@ -251,6 +277,7 @@ export default function Home() {
         <section className={`${styles.card} ${styles.loginCard}`}>
           <p className={styles.eyebrow}>WELCOME TO ME-SMART</p>
           <h2>{signup ? 'สมัครบัญชีนักศึกษา' : 'เข้าสู่ระบบ'}</h2>
+          <p className={styles.muted}>นักศึกษาใช้อีเมลมหาวิทยาลัยตามรหัสนักศึกษา โดยไม่ใส่ขีด ส่วนรหัสผ่านเป็นรหัสผ่านที่ตั้งสำหรับ ME-Smart</p>
           <p className={styles.muted}>บัญชีอาจารย์ต้องได้รับสิทธิ์จากผู้ดูแลฐานข้อมูลเท่านั้น</p>
           <form onSubmit={e => { e.preventDefault(); void authenticate(); }}>
             {signup && <><label className={styles.field}>ชื่อ–นามสกุล<input required value={name} onChange={e => setName(e.target.value)} /></label><label className={styles.field}>รหัสนักศึกษา<input required value={studentId} onChange={e => setStudentId(e.target.value)} /></label></>}
@@ -261,7 +288,15 @@ export default function Home() {
           <div className={styles.quickGuide}><strong>เริ่มใช้งานสำหรับนักศึกษา</strong><p>1. สมัครบัญชีและยืนยันอีเมล<br />2. เข้าร่วมรายวิชาและรออาจารย์อนุมัติ<br />3. สแกน QR เพื่อบันทึกการเข้าเรียน</p></div>
         </section>
         </div>
-      ) : !profile ? <section className={styles.card}>กำลังโหลดข้อมูลผู้ใช้... <button className={styles.secondaryButton} onClick={signOut}>ออกจากระบบ</button></section> : <>
+      ) : !profile ? <section className={styles.card}>กำลังโหลดข้อมูลผู้ใช้... <button className={styles.secondaryButton} onClick={signOut}>ออกจากระบบ</button></section> : emailUpgrade && profile.role === 'student' ? <section className={styles.card}>
+        <h2>เปลี่ยนเป็นอีเมลมหาวิทยาลัย</h2>
+        <p>บัญชีเดิมยังไม่ตรงกับอีเมลนักศึกษาหรือยังไม่ได้ยืนยัน กรุณาเปลี่ยนและยืนยันอีเมลก่อนใช้งานรายวิชา โดยประวัติเดิมจะยังอยู่กับบัญชีเดิม</p>
+        {emailUpgrade.expected ? <form onSubmit={e=>{e.preventDefault();void requestStudentEmailChange();}}>
+          <label className={styles.field}>อีเมลมหาวิทยาลัย<input required type="email" autoComplete="email" value={newStudentEmail} onChange={e=>setNewStudentEmail(e.target.value)} /></label>
+          <p className={styles.muted}>ใช้รหัสนักศึกษาโดยไม่ใส่ขีด ตามด้วย @mail.rmutk.ac.th</p>
+          <button type="submit" disabled={busy} className={styles.primaryButton}>ขอเปลี่ยนอีเมลและยืนยัน</button>
+        </form> : <p>รหัสนักศึกษาในบัญชีไม่อยู่ในรูปแบบที่ตรวจสอบได้ กรุณาติดต่ออาจารย์หรือผู้ดูแลระบบ</p>}
+      </section> : <>
         {profile.role === 'teacher' ? <>
           <section className={`${styles.card} ${styles.teacherHero}`}>
             <Image className={styles.teacherPhoto} src="/teacher.JPG" alt="รูปประจำตัวอาจารย์" width={160} height={190} priority />
