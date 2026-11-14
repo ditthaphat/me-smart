@@ -34,7 +34,10 @@ const fakeDb = {
     if (name === 'smart_stop_window') opened = false;
     if (name === 'smart_rotate_qr') return { data: 'synthetic-token', error: null };
     if (name === 'my_courses') return { data: [{ id: 5, code: 'TEST', title: 'Test course' }], error: null };
-    if (name === 'smart_checkin_v7') return { data: { ok: true, status: 'present', code: 'accepted_present' }, error: null };
+    if (name === 'smart_prepare_qr_checkin') {
+      return { data: args.p_token === 'expired-token' ? {ok:false,code:'invalid_qr'} : {ok:true,claim:`claim-for-${args.p_token}`}, error:null };
+    }
+    if (name === 'smart_finish_qr_checkin') return { data: { ok: true, status: 'present', code: 'accepted_present' }, error: null };
     return { data: null, error: null };
   },
 };
@@ -81,9 +84,11 @@ test('teacher QR supplies both parameters to the student check-in flow', async (
     assert.ok(confirm);
     assert.equal(confirm.props.disabled, false);
     await act(async () => { confirm.props.onClick(); });
-    const call = rpcCalls.find(c => c.name === 'smart_checkin_v7');
+    const prepared = rpcCalls.find(c => c.name === 'smart_prepare_qr_checkin');
+    assert.equal(prepared.args.p_token, 'synthetic-token');
+    const call = rpcCalls.find(c => c.name === 'smart_finish_qr_checkin');
     assert.equal(call.args.p_session_id, session.id);
-    assert.equal(call.args.p_token, 'synthetic-token');
+    assert.equal(call.args.p_claim, 'claim-for-synthetic-token');
     assert.equal(call.args.p_accuracy, 5);
     assert.ok(student.root.findAllByType('strong').some(node => node.children.includes('บันทึกสำเร็จ')));
   } finally {
@@ -101,8 +106,10 @@ test('student check-in accepts a link with separate session and token parameters
     const confirm = student.root.findAllByType('button').find(b => b.children.includes('ยืนยันการเข้าเรียน'));
     assert.ok(confirm);
     await act(async () => { confirm.props.onClick(); });
-    const calls = rpcCalls.filter(c => c.name === 'smart_checkin_v7');
-    assert.equal(calls.at(-1).args.p_token, 'previous-token');
+    const prepared = rpcCalls.filter(c => c.name === 'smart_prepare_qr_checkin');
+    const calls = rpcCalls.filter(c => c.name === 'smart_finish_qr_checkin');
+    assert.equal(prepared.at(-1).args.p_token, 'previous-token');
+    assert.equal(calls.at(-1).args.p_claim, 'claim-for-previous-token');
   } finally {
     if (student) await act(async () => student.unmount());
   }
@@ -111,13 +118,52 @@ test('student check-in accepts a link with separate session and token parameters
 test('student is warned and no check-in is sent when QR parameters are missing', async () => {
   window.location.search = '?session=123';
   let student;
-  const previousCalls = rpcCalls.filter(c => c.name === 'smart_checkin_v7').length;
+  const previousCalls = rpcCalls.filter(c => c.name === 'smart_prepare_qr_checkin' || c.name === 'smart_finish_qr_checkin').length;
   try {
     await act(async () => { student = create(React.createElement(Checkin)); });
     assert.ok(student.root.findAllByProps({ role: 'alert' }).some(node => JSON.stringify(node.children).includes('ลิงก์ QR ไม่ครบถ้วน')));
     assert.equal(student.root.findAllByType('button').filter(b => b.children.includes('ยืนยันการเข้าเรียน')).length, 0);
-    assert.equal(rpcCalls.filter(c => c.name === 'smart_checkin_v7').length, previousCalls);
+    assert.equal(rpcCalls.filter(c => c.name === 'smart_prepare_qr_checkin' || c.name === 'smart_finish_qr_checkin').length, previousCalls);
   } finally {
     if (student) await act(async () => student.unmount());
   }
+});
+
+test('a fresh QR is prepared before GPS is requested and its claim survives a slow location prompt', async () => {
+  window.location.search = '?session=123&token=short-lived';
+  const previousGeo = navigator.geolocation;
+  let resolveLocation;
+  navigator.geolocation = { getCurrentPosition(resolve) { resolveLocation=resolve; } };
+  let student;
+  const begin = rpcCalls.length;
+  try {
+    await act(async () => { student = create(React.createElement(Checkin)); });
+    assert.equal(rpcCalls.slice(begin).filter(c=>c.name==='smart_prepare_qr_checkin').length,1);
+    assert.equal(resolveLocation,undefined,'GPS should only be requested after the user confirms');
+    const confirm = student.root.findAllByType('button').find(b=>b.children.includes('ยืนยันการเข้าเรียน'));
+    await act(async () => { confirm.props.onClick(); });
+    assert.equal(typeof resolveLocation,'function');
+    assert.equal(rpcCalls.slice(begin).filter(c=>c.name==='smart_finish_qr_checkin').length,0);
+    await act(async () => { resolveLocation({coords:{latitude:13.7,longitude:100.5,accuracy:5}}); });
+    const finish = rpcCalls.slice(begin).find(c=>c.name==='smart_finish_qr_checkin');
+    assert.equal(finish.args.p_claim,'claim-for-short-lived');
+    assert.equal(finish.args.p_accuracy,5);
+    assert.ok(student.root.findAllByType('strong').some(node=>node.children.includes('บันทึกสำเร็จ')));
+  } finally {
+    navigator.geolocation=previousGeo;
+    if(student)await act(async()=>student.unmount());
+  }
+});
+
+test('an expired QR is rejected before collecting GPS and cannot be confirmed', async () => {
+  window.location.search = '?session=123&token=expired-token';
+  let student;
+  const begin = rpcCalls.length;
+  try {
+    await act(async () => { student=create(React.createElement(Checkin)); });
+    assert.ok(student.root.findAllByProps({role:'alert'}).some(node=>JSON.stringify(node.children).includes('สแกน QR ล่าสุด')));
+    const confirm=student.root.findAllByType('button').find(b=>b.children.includes('ยืนยันการเข้าเรียน'));
+    assert.equal(confirm.props.disabled,true);
+    assert.equal(rpcCalls.slice(begin).filter(c=>c.name==='smart_finish_qr_checkin').length,0);
+  } finally { if(student)await act(async()=>student.unmount()); }
 });
