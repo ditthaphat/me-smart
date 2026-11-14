@@ -1,3 +1,4 @@
+import type {SupabaseClient} from '@supabase/supabase-js';
 // Synthetic in-memory fixture used only by the isolated preview deployment.
 // No real account, course, student, or mark is read or written.
 const members=Array.from({length:12},(_,i)=>({student_id:`demo-${i+1}`,profiles:{full_name:`นักศึกษาทดสอบ ${i+1}`,student_id:`TEST${String(i+1).padStart(3,'0')}`}}));
@@ -21,4 +22,4 @@ function builder(table:string):any {
  const q:any={select(){return q},eq(k:string,v:any){filters[k]=v;return q},in(){return q},order(){return q},range(a:number,b:number){lo=a;hi=b;return q},upsert(v:any){operation='upsert';payload=v;return q},insert(v:any){operation='insert';payload=v;return q},update(v:any){operation='update';payload=v;return q},delete(){operation='delete';return q},maybeSingle(){return Promise.resolve({data:tables[table]?.[0]??null,error:null})},single(){return Promise.resolve(result())},then(resolve:any,reject:any){return Promise.resolve(result()).then(resolve,reject)}};
  return q;
 }
-export function db():any{return {from:builder,auth:{getUser:async()=>({data:{user:null},error:null}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}})}}}
+export function db():SupabaseClient{return {from:builder,auth:{getUser:async()=>({data:{user:null},error:null}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}})}} as unknown as SupabaseClient}
