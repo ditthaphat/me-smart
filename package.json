@@ -8,7 +8,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node tests/attendance.test.cjs",
-    "test:session-delete": "node --test tests/session-delete-ui.test.cjs && node tests/session-delete-safety.test.cjs"
+    "test:session-delete": "node --test tests/session-delete-ui.test.cjs && node tests/session-delete-safety.test.cjs",
+    "test:student-auth": "node --test tests/student-email.test.cjs tests/student-auth-ui.test.cjs && node tests/student-auth-db.test.cjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.0",

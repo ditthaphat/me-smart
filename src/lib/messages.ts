@@ -3,6 +3,7 @@ export function userMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : error && typeof error === 'object' && 'message' in error ? String(error.message) : '';
   if (/invalid login credentials/i.test(raw)) return 'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง';
   if (/email not confirmed/i.test(raw)) return 'กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ';
+  if (/University email verification required/i.test(raw)) return 'กรุณาเปลี่ยนและยืนยันอีเมลมหาวิทยาลัยในบัญชีเดิมก่อนใช้งาน';
   if (/failed to fetch|networkerror/i.test(raw)) return 'เชื่อมต่อระบบไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองอีกครั้ง';
   const checkinMessages: Record<string, string> = {
     'Please sign in': 'กรุณาเข้าสู่ระบบก่อนเช็คชื่อ',
