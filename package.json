@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/attendance.test.cjs",
+    "test": "node --test tests/*.test.cjs",
     "test:session-delete": "node --test tests/session-delete-ui.test.cjs && node tests/session-delete-safety.test.cjs"
   },
   "dependencies": {
