@@ -70,6 +70,16 @@ test('teacher sees live attendance and saved homework and score after reloading 
  await act(async()=>{score.props.onChange({target:{value:'4'}})});
  await act(async()=>{await score.props.onBlur({target:{value:'4'}})});
  assert.equal(fixtures.gradebook_marks.find(m=>m.item_id===2).score,4);
+ const headings=root.findAllByType('th').map(textOf);
+ assert.ok(headings.some(x=>x.includes('คะแนนเข้าเรียน')));
+ assert.ok(headings.some(x=>x.includes('คะแนนการบ้าน')));
+ assert.ok(headings.some(x=>x.includes('คะแนนโครงงาน')));
+ const row=root.findAllByType('tr').find(x=>textOf(x).includes('TEST001'));
+ const cells=row.findAllByType('td').map(textOf);
+ assert.ok(cells[5].startsWith('10.00'),'attendance subtotal uses the configured weight');
+ assert.ok(cells[6].startsWith('10.00'),'homework subtotal reflects submitted work');
+ assert.ok(cells[7].startsWith('16.00'),'project subtotal reflects 4 of 5 points');
+ assert.ok(cells[11].startsWith('36.00'),'the running total is the sum of weighted categories');
  const refresh=root.findAllByType('button').find(b=>textOf(b)==='↻ อัปเดต');
  await act(async()=>{await refresh.props.onClick()});
  checkbox=root.findByProps({'aria-label':'WS1 นักศึกษาทดสอบ ส่งแล้ว'});
