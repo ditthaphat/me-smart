@@ -11,6 +11,7 @@ type Member={student_id:string;status:string;profiles:{full_name:string;student_
 type Session={id:number;course_id:number;session_date:string;topic:string;is_cancelled:boolean;cancelled_at:string|null};
 type RecordRow={session_id:number;student_id:string;status:Status;note:string};
 type Status='present'|'late'|'absent'|'leave';
+type DeleteSummary={session_id:number;course_id:number;course_code:string;session_date:string;topic:string|null;attendance_records:number;qr_windows:number;qr_tokens:number;qr_attempts:number;security_events:number;leave_requests:number};
 const options:{value:Status;label:string}[]=[{value:'present',label:'มาเรียน'},{value:'late',label:'สาย'},{value:'absent',label:'ขาด'},{value:'leave',label:'ลา'}];
 const err = (e: unknown): string => {
   if (e instanceof Error) return e.message;
@@ -41,6 +42,8 @@ export default function AttendancePanel({courseId,courseCode,teacher,onLockChang
  const [qrLocked,setQrLocked]=useState(false);
  const [recordsLoading,setRecordsLoading]=useState(false);
  const [editingSession, setEditingSession] = useState(false);
+ const [deleteSummary,setDeleteSummary]=useState<DeleteSummary|null>(null);
+ const [deleteConfirmation,setDeleteConfirmation]=useState('');
 const [editDate, setEditDate] = useState('');
 const [editTopic, setEditTopic] = useState('');
  const [draft,setDraft]=useState<Record<string,{status:Status;note:string}>>({});const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[message,setMessage]=useState('');
@@ -70,7 +73,7 @@ const [editTopic, setEditTopic] = useState('');
 function selectSession(id:number) {
   if(qrLocked||busy)return;
   if(dirty&&!window.confirm('มีรายการแก้ไขที่ยังไม่บันทึก ต้องการทิ้งการแก้ไขและเปลี่ยนคาบหรือไม่?'))return;
-  setEditingSession(false);setMessage('');setError('');setSelected(id);
+  setEditingSession(false);setDeleteSummary(null);setDeleteConfirmation('');setMessage('');setError('');setSelected(id);
 }
  // Refresh only clean drafts. Never overwrite a teacher's unsaved edits with QR polling.
  useEffect(()=>{
@@ -165,6 +168,36 @@ async function deleteSession() {
     setBusy(false);
   }
 }
+
+async function preparePermanentDelete() {
+  if (!selectedSession || !selectedSession.is_cancelled || busy || qrLocked || recordsLoading || dirty) return;
+  setBusy(true);setError('');setMessage('');setDeleteSummary(null);setDeleteConfirmation('');
+  try {
+    const {data,error:e}=await db().rpc('cancelled_session_delete_summary',{p_session_id:selectedSession.id});
+    if(e)throw e;
+    if(!data || typeof data!=='object' || Number(data.session_id)!==selectedSession.id)throw Error('ไม่สามารถตรวจสอบข้อมูลคาบเรียน กรุณาลองใหม่');
+    setDeleteSummary(data as DeleteSummary);
+  } catch(e) {setError(err(e));} finally {setBusy(false);}
+}
+
+async function permanentlyDeleteSession() {
+  if (!selectedSession || !deleteSummary || !selectedSession.is_cancelled || busy || qrLocked || recordsLoading || dirty || deleteSummary.session_id!==selectedSession.id || deleteConfirmation!==String(selectedSession.id)) return;
+  setBusy(true);setError('');setMessage('');
+  try {
+    const {error:e}=await db().rpc('delete_cancelled_session_permanently',{
+      p_session_id:selectedSession.id,
+      p_confirmation:deleteConfirmation,
+      p_expected_summary:deleteSummary
+    });
+    if(e)throw e;
+    setDeleteSummary(null);setDeleteConfirmation('');setEditingSession(false);
+    await refresh();onSessionsChange?.();
+    setMessage('ลบคาบเรียนและประวัติที่เกี่ยวข้องถาวรแล้ว');
+  } catch(e) {
+    setDeleteSummary(null);setDeleteConfirmation('');
+    setError(err(e)+' กรุณาตรวจสอบข้อมูลก่อนลองอีกครั้ง');
+  } finally {setBusy(false);}
+}
  async function setCancellation(cancel: boolean) {
   if (!selectedSession || busy || qrLocked) return;
   const action = cancel ? 'ยกเลิก' : 'คืนสถานะ';
@@ -175,7 +208,7 @@ async function deleteSession() {
       p_session_id: selectedSession.id
     });
     if (e) throw e;
-    setEditingSession(false);
+    setEditingSession(false);setDeleteSummary(null);setDeleteConfirmation('');
     await refresh();
     onSessionsChange?.(selectedSession.id);
     setMessage(cancel ? 'ยกเลิกคาบเรียนแล้ว (ยังเก็บประวัติเดิม)' : 'คืนสถานะคาบเรียนแล้ว');
@@ -333,18 +366,23 @@ async function deleteStudentAttendance(
           ✏️ แก้ไขคาบเรียน
         </button>
 
-        <button
+        {!selectedSession.is_cancelled && <button
           type="button"
           className={styles.secondary}
           disabled={busy || qrLocked || recordsLoading}
           onClick={() => void deleteSession()}
         >
           ลบคาบเรียน
-        </button>
+        </button>}
         <button type="button" className={styles.secondary} disabled={busy || qrLocked || recordsLoading}
           onClick={() => void setCancellation(!selectedSession?.is_cancelled)}>
           {selectedSession?.is_cancelled ? '↩ คืนสถานะคาบเรียน' : '⊘ ยกเลิกคาบเรียน (เก็บประวัติ)'}
         </button>
+        {selectedSession.is_cancelled && <button type="button" className={styles.danger}
+          disabled={busy || qrLocked || recordsLoading || dirty}
+          onClick={() => void preparePermanentDelete()}>
+          ตรวจสอบก่อนลบคาบนี้ถาวร
+        </button>}
       </div>
     ) : (
       <div style={{
@@ -402,6 +440,24 @@ async function deleteStudentAttendance(
         </div>
       </div>
     )}
+  {deleteSummary && !editingSession && <div className={styles.dangerZone} role="region" aria-labelledby="delete-session-heading">
+    <h4 id="delete-session-heading">ตรวจสอบก่อนลบคาบเรียนถาวร</h4>
+    <p>รายวิชา {deleteSummary.course_code} · วันที่ {deleteSummary.session_date} · หมายเลขคาบ {deleteSummary.session_id}<br/>หัวข้อ: {deleteSummary.topic || 'ไม่ระบุหัวข้อ'}</p>
+    <p><strong>การลบนี้จะลบประวัติที่เกี่ยวข้องและไม่สามารถกู้คืนผ่านโปรแกรมได้</strong> โดยไม่ลบรายชื่อนักศึกษาหรือรายวิชา</p>
+    <ul>
+      <li>ผลการเช็กชื่อ {deleteSummary.attendance_records} รายการ</li>
+      <li>ใบลา {deleteSummary.leave_requests} รายการ</li>
+      <li>ประวัติความปลอดภัย {deleteSummary.security_events} รายการ</li>
+      <li>ช่วงเปิด QR {deleteSummary.qr_windows} รายการ · รหัส QR {deleteSummary.qr_tokens} รายการ · ความพยายามเช็กชื่อ {deleteSummary.qr_attempts} รายการ</li>
+    </ul>
+    <label>พิมพ์หมายเลขคาบ <strong>{deleteSummary.session_id}</strong> เพื่อยืนยัน
+      <input value={deleteConfirmation} onChange={e=>setDeleteConfirmation(e.target.value)} inputMode="numeric" autoComplete="off" />
+    </label>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}>
+      <button type="button" className={styles.danger} disabled={busy || qrLocked || recordsLoading || dirty || deleteConfirmation!==String(deleteSummary.session_id)} onClick={() => void permanentlyDeleteSession()}>ยืนยันลบถาวร</button>
+      <button type="button" className={styles.secondary} disabled={busy} onClick={()=>{setDeleteSummary(null);setDeleteConfirmation('');}}>กลับ โดยไม่ลบ</button>
+    </div>
+  </div>}
   </div>
 )}
    {teacher&&selectedSession&&<SmartAttendanceTeacher key={selectedSession.id} session={selectedSession} courseCode={courseCode} onLockChange={setQrLocked} disabled={busy||dirty||editingSession||recordsLoading}/>}
