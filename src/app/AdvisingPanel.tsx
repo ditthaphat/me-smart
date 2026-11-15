@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../lib/supabase';
 import Pagination from './Pagination';
 import styles from './advising.module.css';
@@ -14,6 +14,7 @@ type Session = {
 };
 type Status = 'not_recorded' | 'present' | 'absent' | 'leave';
 type Participant = { session_id: number; student_id: number; student_number_snapshot: string; full_name_snapshot: string; attendance_status: Status };
+type StudentDeletionPreview = { student_id: number; group_id: number; student_number: string; full_name: string; participant_count: number; recorded_count: number; fingerprint: string };
 type SessionForm = {
   meeting_date: string; start_time: string; end_time: string; location: string; advisor1: string; advisor2: string; advisor3: string;
   discussion: string; recommendations: string; next_meeting_date: string; next_meeting_time: string; next_meeting_note: string;
@@ -72,6 +73,9 @@ export default function AdvisingPanel({ teacherId, teacherName }: { teacherId: s
   const [editGroup, setEditGroup] = useState(false);
   const [rosterInput, setRosterInput] = useState('');
   const [editStudent, setEditStudent] = useState<Student | null>(null);
+  const [deletePreview, setDeletePreview] = useState<StudentDeletionPreview | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const deletePreviewHeading = useRef<HTMLHeadingElement | null>(null);
   const [studentSearch, setStudentSearch] = useState('');
   const [studentPage, setStudentPage] = useState(0);
   const [participantPage, setParticipantPage] = useState(0);
@@ -130,6 +134,7 @@ export default function AdvisingPanel({ teacherId, teacherName }: { teacherId: s
   useEffect(() => { setStudentPage(0); }, [studentSearch, showArchivedStudents, groupId]);
   useEffect(() => { setSessionPage(0); }, [showArchivedSessions, groupId]);
   useEffect(() => { setParticipantPage(0); }, [sessionId]);
+  useEffect(() => { if (deletePreview) deletePreviewHeading.current?.focus(); }, [deletePreview]);
 
   const filteredStudents = useMemo(() => {
     const q = studentSearch.trim().toLocaleLowerCase();
@@ -155,7 +160,7 @@ export default function AdvisingPanel({ teacherId, teacherName }: { teacherId: s
   }
   function chooseGroup(id: number | null) {
     if (!allowLeaveEditor()) return;
-    setGroupId(id); setSessionId(null); setEditorOpen(false); setShowPrintPreview(false); setEditGroup(false); setEditStudent(null); setRosterInput('');
+    setGroupId(id); setSessionId(null); setEditorOpen(false); setShowPrintPreview(false); setEditGroup(false); setEditStudent(null); setDeletePreview(null); setDeleteConfirmation(''); setRosterInput('');
   }
   async function saveGroup() {
     if (!groupName.trim()) { setError('กรุณากรอกชื่อกลุ่ม'); return; }
@@ -206,6 +211,36 @@ export default function AdvisingPanel({ teacherId, teacherName }: { teacherId: s
     await run(async () => {
       const { error: e } = await db().from('advising_students').update({ is_archived: !student.is_archived }).eq('id', student.id).eq('owner_id', teacherId);
       if (e) throw e; setRefresh(v => v + 1); setMessage(student.is_archived ? 'นำรายชื่อกลับมาแล้ว' : 'เก็บรายชื่อถาวรแล้ว');
+    });
+  }
+  async function previewDeleteStudent(student: Student) {
+    if (editStudent?.id === student.id && !window.confirm('กำลังแก้ไขรายชื่อนี้อยู่ ต้องการทิ้งการแก้ไขและตรวจสอบการลบหรือไม่?')) return;
+    await run(async () => {
+      const { data, error: e } = await db().rpc('preview_advising_student_deletion', { p_student_id: student.id });
+      if (e) throw e;
+      const preview = data as StudentDeletionPreview | null;
+      if (!preview || Number(preview.student_id) !== student.id || Number(preview.group_id) !== student.group_id) throw new Error('ไม่สามารถตรวจสอบรายชื่อนี้ กรุณาอัปเดตแล้วลองใหม่');
+      if (editStudent?.id === student.id) setEditStudent(null);
+      setDeletePreview(preview); setDeleteConfirmation('');
+    });
+  }
+  async function deleteStudent() {
+    if (!deletePreview || deletePreview.group_id !== groupId || deleteConfirmation.trim() !== deletePreview.student_number) return;
+    await run(async () => {
+      const { data, error: e } = await db().rpc('delete_advising_student', {
+        p_student_id: deletePreview.student_id,
+        p_expected_group_id: deletePreview.group_id,
+        p_expected_student_number: deletePreview.student_number,
+        p_expected_full_name: deletePreview.full_name,
+        p_expected_fingerprint: deletePreview.fingerprint,
+        p_confirmation: deleteConfirmation.trim(),
+      });
+      if (e) {
+        if (e.message?.includes('เปลี่ยนไป')) { setDeletePreview(null); setDeleteConfirmation(''); }
+        throw e;
+      }
+      if (!data || Number(data.student_id) !== deletePreview.student_id) throw new Error('ไม่สามารถยืนยันผลการลบ กรุณาอัปเดตรายชื่อ');
+      setDeletePreview(null); setDeleteConfirmation(''); setRefresh(v => v + 1); setMessage('ลบรายชื่อนักศึกษาจากกลุ่มที่ปรึกษาแล้ว');
     });
   }
   function newSession() {
@@ -273,7 +308,7 @@ export default function AdvisingPanel({ teacherId, teacherName }: { teacherId: s
     <div className={styles.card}>
       <div className={styles.sectionTitle}><div><h3>กลุ่มนักศึกษาในความดูแล</h3><p>จัดกลุ่มแยกจากรายวิชาที่ใช้เช็กชื่อ</p></div><span className={styles.count}>{groups.filter(g => !g.is_archived).length} กลุ่ม</span></div>
       {loading ? <p>กำลังโหลดกลุ่ม...</p> : <>
-        <div className={styles.row}><label className={styles.field}>เลือกกลุ่ม<select value={groupId ?? ''} onChange={e => chooseGroup(e.target.value ? Number(e.target.value) : null)}><option value="">เลือกกลุ่มนักศึกษา</option>{groups.filter(g => showArchived || !g.is_archived || g.id === groupId).map(g => <option key={g.id} value={g.id}>{g.name}{g.cohort ? ` · ${g.cohort}` : ''}{g.is_archived ? ' (เก็บถาวร)' : ''}</option>)}</select></label><label className={styles.check}><input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} /> แสดงกลุ่มที่เก็บถาวร</label></div>
+        <div className={styles.row}><label className={styles.field}>เลือกกลุ่ม<select value={groupId ?? ''} disabled={busy} onChange={e => chooseGroup(e.target.value ? Number(e.target.value) : null)}><option value="">เลือกกลุ่มนักศึกษา</option>{groups.filter(g => showArchived || !g.is_archived || g.id === groupId).map(g => <option key={g.id} value={g.id}>{g.name}{g.cohort ? ` · ${g.cohort}` : ''}{g.is_archived ? ' (เก็บถาวร)' : ''}</option>)}</select></label><label className={styles.check}><input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} /> แสดงกลุ่มที่เก็บถาวร</label></div>
         {group && <div className={styles.actions}><button type="button" onClick={() => { setGroupName(group.name); setGroupCohort(group.cohort); setEditGroup(true); }}>แก้ไขชื่อกลุ่ม</button><button type="button" onClick={() => void archiveGroup()} disabled={busy}>{group.is_archived ? 'นำกลุ่มกลับ' : 'เก็บกลุ่มถาวร'}</button></div>}
         <details open={editGroup || undefined}><summary>{editGroup ? 'แก้ไขกลุ่มนักศึกษา' : '+ เพิ่มกลุ่มนักศึกษา'}</summary><form onSubmit={e => { e.preventDefault(); void saveGroup(); }} className={styles.formGrid}><label className={styles.field}>ชื่อกลุ่ม *<input required maxLength={120} value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="เช่น นักศึกษาที่ปรึกษา ชั้นปีที่ 1" /></label><label className={styles.field}>รุ่น / ภาคเรียน<input maxLength={120} value={groupCohort} onChange={e => setGroupCohort(e.target.value)} placeholder="เช่น รหัส 69 หรือ 2/2569" /></label><div className={styles.actions}><button className={styles.primary} disabled={busy}>{editGroup ? 'บันทึกชื่อกลุ่ม' : 'เพิ่มกลุ่ม'}</button>{editGroup && <button type="button" onClick={() => { setEditGroup(false); setGroupName(''); setGroupCohort(''); }}>ยกเลิก</button>}</div></form></details>
       </>}
@@ -286,8 +321,16 @@ export default function AdvisingPanel({ teacherId, teacherName }: { teacherId: s
         <div className={styles.sectionTitle}><div><h3>รายชื่อนักศึกษา</h3><p>รายชื่อในกลุ่มนี้ {activeStudents.length} คน</p></div><button type="button" onClick={() => downloadRoster(activeStudents)} disabled={!activeStudents.length}>ส่งออก CSV</button></div>
         <details><summary>+ เพิ่มรายชื่อนักศึกษา</summary><p>กรอกหนึ่งคนต่อหนึ่งบรรทัด ในรูปแบบ <strong>รหัสนักศึกษา,ชื่อ–สกุล</strong> สามารถวางหลายบรรทัดพร้อมกันได้</p><form onSubmit={e => { e.preventDefault(); void addStudents(); }}><label className={styles.field}>รายชื่อ<textarea rows={5} value={rosterInput} onChange={e => setRosterInput(e.target.value)} placeholder={'66000000001,นักศึกษาตัวอย่าง ก\n66000000002,นักศึกษาตัวอย่าง ข'} /></label><button className={styles.primary} disabled={busy || group.is_archived}>เพิ่มรายชื่อ</button></form></details>
         {editStudent && <form onSubmit={e => { e.preventDefault(); void saveStudent(); }} className={styles.inlineEditor}><h4>แก้ไขรายชื่อ</h4><div className={styles.formGrid}><label className={styles.field}>รหัสนักศึกษา<input required maxLength={40} value={editStudent.student_number} onChange={e => setEditStudent({ ...editStudent, student_number: e.target.value })} /></label><label className={styles.field}>ชื่อ–สกุล<input required maxLength={200} value={editStudent.full_name} onChange={e => setEditStudent({ ...editStudent, full_name: e.target.value })} /></label></div><div className={styles.actions}><button className={styles.primary} disabled={busy || group.is_archived}>บันทึก</button><button type="button" onClick={() => setEditStudent(null)}>ยกเลิก</button></div><p>การแก้ไขรายชื่อจะไม่เปลี่ยนรายชื่อที่บันทึกไว้ในการประชุมครั้งก่อน</p></form>}
+        {deletePreview && <form onSubmit={e => { e.preventDefault(); void deleteStudent(); }} className={styles.deletePreview} aria-label="ตรวจสอบการลบนักศึกษา">
+          <h4 ref={deletePreviewHeading} tabIndex={-1}>ตรวจสอบก่อนลบรายชื่อถาวร</h4>
+          <p><strong>{deletePreview.student_number} · {deletePreview.full_name}</strong></p>
+          {deletePreview.participant_count > 0 ? <p>รายชื่อนี้อยู่ในบันทึกการปรึกษา {deletePreview.participant_count} ครั้ง (บันทึกสถานะแล้ว {deletePreview.recorded_count} ครั้ง) การลบจะลบรายชื่อนี้ออกจากรายชื่อผู้เข้าร่วมและแบบพิมพ์ของบันทึกเหล่านั้นด้วย</p> : <p>ไม่พบรายชื่อนี้ในบันทึกการปรึกษา</p>}
+          <p>ข้อความการปรึกษา รายชื่อคนอื่น บัญชีนักศึกษา รายวิชา การเช็กชื่อ และคะแนนยังอยู่ การลบรายชื่อนี้ไม่สามารถกู้คืนจากหน้านี้ได้</p>
+          <label className={styles.field}>พิมพ์รหัสนักศึกษา {deletePreview.student_number} เพื่อยืนยัน<input aria-label="รหัสนักศึกษาเพื่อยืนยันการลบ" autoComplete="off" value={deleteConfirmation} onChange={e => setDeleteConfirmation(e.target.value)} /></label>
+          <div className={styles.actions}><button type="submit" className={styles.danger} disabled={busy || deleteConfirmation.trim() !== deletePreview.student_number}>ลบรายชื่อนี้ถาวร</button><button type="button" disabled={busy} onClick={() => { setDeletePreview(null); setDeleteConfirmation(''); }}>ยกเลิก</button></div>
+        </form>}
         <div className={styles.row}><label className={styles.field}>ค้นหานักศึกษา<input type="search" value={studentSearch} onChange={e => setStudentSearch(e.target.value)} placeholder="ค้นหาชื่อหรือรหัส" /></label><label className={styles.check}><input type="checkbox" checked={showArchivedStudents} onChange={e => setShowArchivedStudents(e.target.checked)} /> แสดงรายชื่อที่เก็บถาวร</label></div>
-        {filteredStudents.length ? <div className={styles.tableWrap}><table><thead><tr><th>รหัสนักศึกษา</th><th>ชื่อ–สกุล</th><th>สถานะ</th><th>จัดการ</th></tr></thead><tbody>{filteredStudents.slice(studentCurrent * 10, studentCurrent * 10 + 10).map(s => <tr key={s.id}><td>{s.student_number}</td><td>{s.full_name}</td><td>{s.is_archived ? 'เก็บถาวร' : 'ใช้งาน'}</td><td><div className={styles.actions}><button type="button" disabled={group.is_archived} onClick={() => setEditStudent(s)}>แก้ไข</button><button type="button" disabled={busy || group.is_archived} onClick={() => void archiveStudent(s)}>{s.is_archived ? 'นำกลับ' : 'เก็บถาวร'}</button></div></td></tr>)}</tbody></table></div> : <p className={styles.empty}>ยังไม่มีรายชื่อที่ตรงกับเงื่อนไข</p>}
+        {filteredStudents.length ? <div className={styles.tableWrap}><table><thead><tr><th>รหัสนักศึกษา</th><th>ชื่อ–สกุล</th><th>สถานะ</th><th>จัดการ</th></tr></thead><tbody>{filteredStudents.slice(studentCurrent * 10, studentCurrent * 10 + 10).map(s => <tr key={s.id}><td>{s.student_number}</td><td>{s.full_name}</td><td>{s.is_archived ? 'เก็บถาวร' : 'ใช้งาน'}</td><td><div className={styles.actions}><button type="button" disabled={group.is_archived} onClick={() => setEditStudent(s)}>แก้ไข</button><button type="button" disabled={busy || group.is_archived} onClick={() => void archiveStudent(s)}>{s.is_archived ? 'นำกลับ' : 'เก็บถาวร'}</button><button type="button" className={styles.danger} disabled={busy || detailLoading} aria-label={`ลบ ${s.full_name}`} onClick={() => void previewDeleteStudent(s)}>ลบ</button></div></td></tr>)}</tbody></table></div> : <p className={styles.empty}>ยังไม่มีรายชื่อที่ตรงกับเงื่อนไข</p>}
         <Pagination page={studentCurrent} total={filteredStudents.length} onChange={setStudentPage} />
       </div>
       <div hidden={workspace !== 'sessions'} className={styles.stack}>
