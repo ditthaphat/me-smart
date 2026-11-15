@@ -42,6 +42,7 @@ Module._load=function(request,parent){
     if(request==='../lib/supabase')return {db:()=>({from:query})};
     if(request==='./Pagination')return {__esModule:true,default:({page,total,onChange})=>React.createElement('nav',null,React.createElement('span',null,`หน้า ${page+1} จาก ${total}`),React.createElement('button',{type:'button',onClick:()=>onChange(page+1)},'ถัดไป'))};
     if(request==='./ChapterProgressPanel')return {__esModule:true,default:({materialTitle,onBack})=>React.createElement('section',{'data-testid':'progress-panel'},materialTitle,React.createElement('button',{type:'button',onClick:onBack},'กลับ'))};
+    if(request==='./MaterialPublicationPanel')return {__esModule:true,default:({source,onBack})=>React.createElement('section',{'data-testid':'publication-panel'},source.title,React.createElement('button',{type:'button',onClick:onBack},'กลับ'))};
     if(request.endsWith('.css'))return {__esModule:true,default:new Proxy({},{get:(_,key)=>String(key)})};
   }
   return originalLoad.apply(this,arguments);
