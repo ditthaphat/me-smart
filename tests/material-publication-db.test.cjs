@@ -41,6 +41,7 @@ test('publication, student access, open logs and statistics respect course and t
     `);
     await db.exec(fs.readFileSync(path.join(__dirname,'../docs/database/teaching-materials.sql'),'utf8'));
     await db.exec(fs.readFileSync(path.join(__dirname,'../docs/database/material-publication.sql'),'utf8'));
+    await db.exec(fs.readFileSync(path.join(__dirname,'../docs/database/material-publication-performance.sql'),'utf8'));
     async function asUser(id) { await db.exec('reset role'); await db.query("select set_config('request.jwt.claim.sub',$1,false)",[id]); await db.exec('set role authenticated'); }
     await asUser(teacher);
     const material=(await db.query("insert into public.teaching_materials(course_id,title,material_type,external_url,notes) values(5,'บทที่ 1','lesson','https://example.com/chapter1','private teacher note') returning id")).rows[0];
