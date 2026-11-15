@@ -10,6 +10,7 @@ const { create, act } = require('react-test-renderer');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let role = 'teacher';
 let panelMounts = 0;
+let materialMounts = 0;
 const students = Array.from({ length: 40 }, (_, i) => ({
   course_id: 5,
   student_id: `student-${i + 1}`,
@@ -52,6 +53,11 @@ function FakeAttendance({ onLockChange }) {
     React.createElement('button', { 'data-testid': 'lock', onClick: () => onLockChange(true) }, 'lock'),
     React.createElement('button', { 'data-testid': 'unlock', onClick: () => onLockChange(false) }, 'unlock'));
 }
+function FakeMaterials() {
+  const [draft,setDraft]=React.useState('');
+  React.useEffect(()=>{materialMounts++;},[]);
+  return React.createElement('input',{'data-testid':'materials-draft',value:draft,onChange:e=>setDraft(e.target.value)});
+}
 const emptyComponent = () => null;
 const originalLoad = Module._load;
 Module._load = function (request, parent, isMain) {
@@ -60,6 +66,7 @@ Module._load = function (request, parent, isMain) {
     if (request === '../lib/messages') return { userMessage: String };
     if (request === '../lib/supabase') return { db: () => fakeDb };
     if (request === './AttendancePanel') return { __esModule: true, default: FakeAttendance };
+    if (request === './MaterialsPanel') return { __esModule: true, default: FakeMaterials };
     if (['./AttendanceSecurity', './AttendanceAnalytics', './StudentLeaveRequest', './TeacherLeaveApproval', './Pagination', './AdvisingPanel', './GradebookPanel'].includes(request)) {
       return { __esModule: true, default: emptyComponent };
     }
@@ -78,6 +85,7 @@ Module._load = originalLoad;
 async function renderHome(asRole) {
   role = asRole;
   panelMounts = 0;
+  materialMounts = 0;
   let renderer;
   await act(async () => { renderer = create(React.createElement(Home)); });
   return renderer;
@@ -127,7 +135,21 @@ test('student dashboard keeps its course list without teacher navigation', async
   const renderer = await renderHome('student');
   const root = renderer.root;
   assert.equal(root.findAllByProps({ role: 'tablist' }).length, 0);
+  assert.equal(root.findAllByProps({ 'data-testid': 'materials-draft' }).length, 0);
   assert.ok(root.findAllByType('h2').some(node => node.children.includes('รายวิชาของฉัน')));
   assert.ok(root.findAllByType('h3').some(node => node.children.includes('Fluid Mechanics')));
   await act(async () => renderer.unmount());
+});
+
+test('teaching materials opens lazily and keeps unsaved work while switching tabs', async () => {
+  const renderer=await renderHome('teacher'); const root=renderer.root;
+  assert.equal(materialMounts,0);
+  await click(byId(root,'teacher-tab-materials'));
+  assert.equal(materialMounts,1);
+  await act(async()=>{root.findByProps({'data-testid':'materials-draft'}).props.onChange({target:{value:'ร่างเอกสาร'}});});
+  await click(byId(root,'teacher-tab-advising'));
+  await click(byId(root,'teacher-tab-materials'));
+  assert.equal(materialMounts,1);
+  assert.equal(root.findByProps({'data-testid':'materials-draft'}).props.value,'ร่างเอกสาร');
+  await act(async()=>renderer.unmount());
 });
