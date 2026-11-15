@@ -39,8 +39,8 @@ const fakeDb={
     assert.equal(name,'teacher_material_open_stats');
     const count=records.material_open_events.filter(e=>e.publication_id===p_publication_id&&e.student_id==='student-a').length;
     return {data:[
-      {student_id:'student-a',student_number:'A',full_name:'นักศึกษาทดสอบ ก',open_count:count,last_open:count?'2026-11-15T10:00:00Z':null},
-      {student_id:'student-b',student_number:'B',full_name:'นักศึกษาทดสอบ ข',open_count:0,last_open:null},
+      {student_id:'student-a',student_number:'686040300125',full_name:'นักศึกษาทดสอบ ก',open_count:count,last_open:count?'2026-11-15T10:00:00Z':null},
+      {student_id:'student-b',student_number:'675040300425',full_name:'นักศึกษาทดสอบ ข',open_count:0,last_open:null},
     ],error:null};
   },
 };
@@ -58,7 +58,7 @@ Module._load=function(request,parent){
   }
   return originalLoad.apply(this,arguments);
 };
-require.extensions['.tsx']=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,filename);
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,filename);
 const Teacher=require('../src/app/MaterialPublicationPanel.tsx').default;
 const Student=require('../src/app/StudentMaterials.tsx').default;
 Module._load=originalLoad;
@@ -75,6 +75,9 @@ test('teacher publishes, student clicks, teacher sees current-roster counts, the
   assert.equal(records.material_publications[0].is_published,true);
   assert.doesNotMatch(JSON.stringify(records.material_publications[0]),/notes|private/);
   assert.match(textOf(teacher.root),/0\/2/);
+  const studentRows=teacher.root.findByType('tbody').findAllByType('tr');
+  assert.match(textOf(studentRows[0]),/675040300425/);
+  assert.match(textOf(studentRows[1]),/686040300125/);
   let student; await act(async()=>{student=create(React.createElement(Student,{courses}));});
   assert.match(textOf(student.root),/บทที่ 1/);
   await click(button(student.root,'เปิดเอกสาร ↗'));

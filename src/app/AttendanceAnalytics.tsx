@@ -1,6 +1,7 @@
 'use client';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {db} from '../lib/supabase';
+import {sortStudentsByNumber} from '../lib/student-sort';
 import {downloadExcel, type ReportSheet} from '../lib/excel-export';
 import {userMessage} from '../lib/messages';
 import Pagination from './Pagination';
@@ -39,7 +40,7 @@ export default function AttendanceAnalytics({courseId,courseCode}:{courseId:numb
     while(ids.length){const r=await db().from('attendance_records').select('session_id,student_id,status,note').in('session_id',ids).order('session_id',{ascending:true}).order('student_id',{ascending:true}).range(from,from+size-1);if(r.error)throw r.error;const batch=(r.data??[]) as Entry[];all.push(...batch);if(batch.length<size)break;from+=size}
    }
    if(id!==request.current)return;
-   setSessions(ss);setMembers(mm);setEntries(all);
+   setSessions(ss);setMembers(sortStudentsByNumber(mm,x=>x.profiles?.student_id,x=>`${x.profiles?.full_name??''}|${x.student_id}`));setEntries(all);
   }catch(e){if(id===request.current){setSessions([]);setMembers([]);setEntries([]);setError(userMessage(e))}}finally{if(id===request.current)setLoading(false)}
  },[courseId]);
  useEffect(()=>{setSessions([]);setMembers([]);setEntries([]);setSelected(null);setDateFrom('');setDateTo('');setQuery('');setAssessment('all');void refresh();return()=>{request.current++}},[refresh]);

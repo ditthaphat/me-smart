@@ -1,6 +1,7 @@
 'use client';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {db} from '../lib/supabase';
+import {sortStudentsByNumber} from '../lib/student-sort';
 import {userMessage} from '../lib/messages';
 import {downloadExcel,type ExcelCell} from '../lib/excel-export';
 import {assess,categories,categoryNames,settingsExample,templateItems,type Attendance,type AttendanceStatus,type Category,type Item,type Mark,type Session,type Settings} from '../lib/gradebook';
@@ -105,7 +106,7 @@ export default function GradebookPanel({courseId,courseCode,refreshVersion}:{cou
    }
    for(let from=0;;from+=500){const r=await db().from('gradebook_marks').select('course_id,item_id,student_id,submitted,score').eq('course_id',courseId).order('item_id').order('student_id').range(from,from+499);if(r.error)throw r.error;const batch=(r.data??[]) as Mark[];loadedMarks.push(...batch);if(batch.length<500)break}
    if(version!==request.current)return;
-   setSessions(ss);setStudents(mm.sort((a,b)=>(a.profiles?.student_id??'').localeCompare(b.profiles?.student_id??'')));setAttendance(aa);setItems(ordered);setMarks(loadedMarks);setSettings(settingsResult.data as Settings|null);setDrafts({});
+   setSessions(ss);setStudents(sortStudentsByNumber(mm,x=>x.profiles?.student_id,x=>`${x.profiles?.full_name??''}|${x.student_id}`));setAttendance(aa);setItems(ordered);setMarks(loadedMarks);setSettings(settingsResult.data as Settings|null);setDrafts({});
   }catch(err){if(version===request.current){setError('โหลดตารางคะแนนไม่สำเร็จ: '+userMessage(err));setStudents([]);setItems([]);setMarks([]);setSessions([]);setAttendance([])}}finally{if(version===request.current)setLoading(false)}
  },[courseId]);
  useEffect(()=>{void refresh();return()=>{request.current++}},[refresh,refreshVersion]);

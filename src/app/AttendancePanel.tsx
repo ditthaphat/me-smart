@@ -2,6 +2,7 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import {downloadExcel} from '../lib/excel-export';
 import {db} from '../lib/supabase';
+import {sortStudentsByNumber} from '../lib/student-sort';
 import styles from './attendance.module.css';
 import Pagination from './Pagination';
 import compact from './compact-ui.module.css';
@@ -58,7 +59,7 @@ const [editTopic, setEditTopic] = useState('');
     teacher?db().from('enrollments').select('student_id,status,profiles!enrollments_student_id_fkey(full_name,student_id)').eq('course_id',courseId).eq('status','approved'):Promise.resolve({data:[],error:null})
    ]);
    if(s.error)throw s.error;if(m.error)throw m.error;
-   const list=(s.data??[]) as Session[];setSessions(list);setMembers((m.data??[]) as unknown as Member[]);
+   const list=(s.data??[]) as Session[];setSessions(list);setMembers(sortStudentsByNumber((m.data??[]) as unknown as Member[],x=>x.profiles?.student_id,x=>`${x.profiles?.full_name??''}|${x.student_id}`));
    setSelected(old=>old!==null&&list.some(x=>x.id===old)?old:(list[0]?.id??null));
   }catch(e){setError(err(e));}finally{setLoading(false)}
  },[courseId,teacher]);

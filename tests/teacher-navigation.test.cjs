@@ -11,6 +11,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let role = 'teacher';
 let panelMounts = 0;
 let materialMounts = 0;
+let pendingRequests = [];
 const students = Array.from({ length: 40 }, (_, i) => ({
   course_id: 5,
   student_id: `student-${i + 1}`,
@@ -24,7 +25,7 @@ function query(table) {
   const result = () => {
     if (table === 'profiles') return { data: { id: 'user-1', full_name: 'ผู้ใช้ทดสอบ', student_id: role === 'student' ? '1' : null, role }, error: null };
     if (table === 'courses') return { data: [course], error: null };
-    if (table === 'enrollments') return { data: filters.status === 'pending' ? [] : students, error: null };
+    if (table === 'enrollments') return { data: filters.status === 'pending' ? pendingRequests : students, error: null };
     return { data: [], error: null };
   };
   const builder = {
@@ -67,14 +68,15 @@ Module._load = function (request, parent, isMain) {
     if (request === '../lib/supabase') return { db: () => fakeDb };
     if (request === './AttendancePanel') return { __esModule: true, default: FakeAttendance };
     if (request === './MaterialsPanel') return { __esModule: true, default: FakeMaterials };
-    if (['./AttendanceSecurity', './AttendanceAnalytics', './StudentLeaveRequest', './StudentMaterials', './TeacherLeaveApproval', './Pagination', './AdvisingPanel', './GradebookPanel'].includes(request)) {
+    if (request === './Pagination') return { __esModule: true, default: ({page,onChange}) => React.createElement('nav', null, React.createElement('button', {'data-testid':'next-page',onClick:()=>onChange(page+1)},'ถัดไป')) };
+    if (['./AttendanceSecurity', './AttendanceAnalytics', './StudentLeaveRequest', './StudentMaterials', './TeacherLeaveApproval', './AdvisingPanel', './GradebookPanel'].includes(request)) {
       return { __esModule: true, default: emptyComponent };
     }
     if (request.endsWith('.css')) return { __esModule: true, default: new Proxy({}, { get: (_, key) => String(key) }) };
   }
   return originalLoad.apply(this, arguments);
 };
-require.extensions['.tsx'] = (mod, filename) => {
+for (const ext of ['.ts', '.tsx']) require.extensions[ext] = (mod, filename) => {
   const source = fs.readFileSync(filename, 'utf8');
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   mod._compile(output, filename);
@@ -92,6 +94,7 @@ async function renderHome(asRole) {
 }
 async function click(element) { await act(async () => { await element.props.onClick(); }); }
 const byId = (root, id) => root.findByProps({ id });
+const textOf = node => node.children.flatMap(x=>typeof x==='string'?[x]:typeof x==='object'?textOf(x):[]).join('');
 
 test('teacher course navigation retains the mounted attendance workspace', async () => {
   const renderer = await renderHome('teacher');
@@ -152,4 +155,52 @@ test('teaching materials opens lazily and keeps unsaved work while switching tab
   assert.equal(materialMounts,1);
   assert.equal(root.findByProps({'data-testid':'materials-draft'}).props.value,'ร่างเอกสาร');
   await act(async()=>renderer.unmount());
+});
+
+test('course members and pending requests use ascending student numbers regardless of arrival order', async () => {
+  const previous = students.splice(0, students.length);
+  const make = (id, studentId, status='approved') => ({course_id:5,student_id:id,status,profiles:{full_name:`นักศึกษา ${id}`,student_id:studentId}});
+  students.push(make('first','686040300125'),make('second','675040300425'));
+  for(let i=9;i>=0;i--)students.push(make(`extra-${i}`,`69${String(i).padStart(10,'0')}`));
+  pendingRequests=[make('pending-later','686040300125','pending'),make('pending-earlier','675040300425','pending')];
+  let renderer;
+  let capturedBlob;
+  const previousDocument=global.document, oldCreate=URL.createObjectURL, oldRevoke=URL.revokeObjectURL;
+  try {
+    global.document={createElement:()=>({click(){}})};
+    URL.createObjectURL=blob=>{capturedBlob=blob;return 'blob:student-sort-test';};
+    URL.revokeObjectURL=()=>{};
+    renderer=await renderHome('teacher');
+    const root=renderer.root;
+    await click(byId(root,'teacher-tab-courses'));
+    const pending=root.findAllByProps({className:'listItem'}).map(textOf);
+    assert.ok(pending[0].includes('675040300425'));
+    assert.ok(pending[1].includes('686040300125'));
+    pendingRequests.push(make('pending-new','665040300111','pending'));
+    await click(root.findAllByType('button').find(button=>button.children.includes('↻ อัปเดตคำขอ')));
+    const refreshedPending=root.findAllByProps({className:'listItem'}).map(textOf);
+    assert.ok(refreshedPending[0].includes('665040300111'));
+    await click(root.findAllByType('button').find(button=>button.children.includes('จัดการรายวิชา →')));
+    const roster=()=>root.findByProps({id:'course-management'}).findByType('tbody').findAllByType('tr').map(textOf);
+    assert.ok(roster()[0].includes('675040300425'));
+    assert.ok(roster()[1].includes('686040300125'));
+    await click(root.findAllByType('button').find(button=>button.children.includes('ส่งออก CSV (Excel)')));
+    const csv=await capturedBlob.text();
+    assert.ok(csv.indexOf('675040300425')<csv.indexOf('686040300125'),'CSV must match the displayed order');
+    assert.equal(csv.trim().split('\r\n').length,13,'CSV must include all students, including those on later pages');
+    students.push(make('third','665040300111'));
+    await click(root.findAllByType('button').find(button=>button.children.includes('↻ อัปเดตรายชื่อ')));
+    assert.ok(roster()[0].includes('665040300111'),'a new lower number is inserted at the top after refresh');
+    assert.ok(roster()[1].includes('675040300425'));
+    assert.ok(roster()[2].includes('686040300125'));
+    await click(root.findByProps({'data-testid':'next-page'}));
+    assert.equal(roster().length,3,'remaining sorted students are on the next page');
+  } finally {
+    if(renderer)await act(async()=>renderer.unmount());
+    students.splice(0,students.length,...previous);
+    pendingRequests=[];
+    global.document=previousDocument;
+    URL.createObjectURL=oldCreate;
+    URL.revokeObjectURL=oldRevoke;
+  }
 });

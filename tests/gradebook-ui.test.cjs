@@ -19,6 +19,7 @@ const fixtures={
  gradebook_marks:[],
 };
 let failSave=false;
+let excelReport;
 function query(table){
  let action='read',payload=null;
  const builder={
@@ -46,14 +47,14 @@ Module._load=function(request,parent){
  if(parent&&parent.filename.endsWith(path.join('src','app','GradebookPanel.tsx'))){
   if(request==='../lib/supabase')return {db:()=>({from:query})};
   if(request==='../lib/messages')return {userMessage:e=>e.message??String(e)};
-  if(request==='../lib/excel-export')return {downloadExcel:async()=>{}};
+  if(request==='../lib/excel-export')return {downloadExcel:async(_name,sheets)=>{excelReport=sheets;}};
   if(request==='../lib/gradebook')return copy.exports;
   if(request==='./Pagination')return {__esModule:true,default:()=>null};
   if(request.endsWith('.css'))return {__esModule:true,default:new Proxy({},{get:(_,key)=>String(key)})};
  }
  return originalLoad.apply(this,arguments);
 };
-require.extensions['.tsx']=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,filename);
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,filename);
 const GradebookPanel=require('../src/app/GradebookPanel.tsx').default;
 Module._load=originalLoad;
 const textOf=node=>node.children.flatMap(x=>typeof x==='string'?[x]:typeof x==='object'?textOf(x):[]).join('');
@@ -91,4 +92,29 @@ test('teacher sees live attendance and saved homework and score after reloading 
  assert.equal(fixtures.gradebook_marks.find(m=>m.item_id===1).submitted,true,'a failed request must not silently change the saved mark');
  assert.ok(root.findAll(x=>x.props.role==='alert'&&textOf(x).includes('บันทึกไม่สำเร็จ')).length);
  failSave=false;await act(async()=>renderer.unmount());
+});
+
+test('gradebook and Excel follow student numbers and keep homework attached to each student',async()=>{
+ const saved={enrollments:fixtures.enrollments,attendance_records:fixtures.attendance_records,gradebook_marks:fixtures.gradebook_marks};
+ fixtures.enrollments=[
+  {student_id:'high',profiles:{full_name:'นักศึกษารหัสสูง',student_id:'686040300125'}},
+  {student_id:'low',profiles:{full_name:'นักศึกษารหัสต่ำ',student_id:'675040300425'}},
+ ];
+ fixtures.attendance_records=[{session_id:10,student_id:'high',status:'present'},{session_id:10,student_id:'low',status:'late'}];
+ fixtures.gradebook_marks=[{course_id:1,item_id:1,student_id:'high',submitted:true,score:null},{course_id:1,item_id:1,student_id:'low',submitted:false,score:null}];
+ let renderer;
+ try {
+  await act(async()=>{renderer=create(React.createElement(GradebookPanel,{courseId:1,courseCode:'4112203',refreshVersion:0}))});
+  const root=renderer.root,rows=root.findByType('tbody').findAllByType('tr');
+  assert.ok(textOf(rows[0]).includes('675040300425'));
+  assert.ok(textOf(rows[1]).includes('686040300125'));
+  assert.equal(root.findByProps({'aria-label':'WS1 นักศึกษารหัสต่ำ ส่งแล้ว'}).props.checked,false);
+  assert.equal(root.findByProps({'aria-label':'WS1 นักศึกษารหัสสูง ส่งแล้ว'}).props.checked,true);
+  const exportButton=root.findAllByType('button').find(button=>textOf(button)==='ส่งออก Excel');
+  await act(async()=>{await exportButton.props.onClick()});
+  assert.deepEqual(excelReport[0].rows.map(row=>row[0]),['675040300425','686040300125']);
+ } finally {
+  if(renderer)await act(async()=>renderer.unmount());
+  Object.assign(fixtures,saved);excelReport=undefined;
+ }
 });

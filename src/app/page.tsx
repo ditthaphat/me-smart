@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Image from 'next/image';
 import { userMessage } from '../lib/messages';
 import { db } from '../lib/supabase';
+import { sortStudentsByNumber } from '../lib/student-sort';
 import styles from './dashboard.module.css';
 import compact from './compact-ui.module.css';
 import Pagination from './Pagination';
@@ -108,7 +109,7 @@ export default function Home() {
         if (courseResult.error) throw courseResult.error;
         if (requestResult.error) throw requestResult.error;
         setCourses((courseResult.data ?? []) as Course[]);
-        setRequests((requestResult.data ?? []) as unknown as Enrollment[]);
+        setRequests(sortStudentsByNumber((requestResult.data ?? []) as unknown as Enrollment[], r => r.profiles?.student_id, r => `${r.profiles?.full_name ?? ''}|${r.student_id}|${r.course_id}`));
         if (approvedResult.error) {
           setApproved([]);
           setError(`ไม่สามารถโหลดจำนวนนักศึกษา: ${errorText(approvedResult.error)}`);
@@ -144,7 +145,7 @@ export default function Home() {
         .select('course_id,student_id,status,profiles!enrollments_student_id_fkey(full_name,student_id)')
         .eq('course_id', id).order('requested_at', { ascending: false });
       if (e) throw e;
-      setMembers((data ?? []) as unknown as CourseMember[]);
+      setMembers(sortStudentsByNumber((data ?? []) as unknown as CourseMember[], m => m.profiles?.student_id, m => `${m.profiles?.full_name ?? ''}|${m.student_id}`));
     } catch (e) { setError(errorText(e)); setMembers([]); }
     finally { setMembersLoading(false); }
   };
@@ -401,7 +402,7 @@ export default function Home() {
             </form>
           </section>
           <section className={styles.card}>
-            <div className={styles.sectionHeading}><h2>คำขอเข้าร่วมที่รออนุมัติ</h2><span className={styles.count}>{requests.length}</span></div>
+            <div className={styles.sectionHeading}><h2>คำขอเข้าร่วมที่รออนุมัติ</h2><div className={styles.actions}><span className={styles.count}>{requests.length}</span><button type="button" className={styles.secondaryButton} disabled={busy} onClick={() => void load()}>↻ อัปเดตคำขอ</button></div></div>
             {requests.length === 0 ? <p className={styles.empty}>ยังไม่มีคำขอเข้าร่วม</p> : requests.map(r => <div className={styles.listItem} key={`${r.course_id}-${r.student_id}`}>
               <strong>{r.profiles?.full_name ?? r.student_id}</strong>
               <p className={styles.muted}>รหัสนักศึกษา: {r.profiles?.student_id ?? '-'} · Course ID: {r.course_id}</p>
@@ -426,9 +427,9 @@ export default function Home() {
           <div className={styles.studentTools}>
             <label className={styles.field}>ค้นหานักศึกษา<input type="search" placeholder="ค้นหาชื่อหรือรหัสนักศึกษา" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} /></label>
             <label className={styles.field}>สถานะ<select className={styles.selectField} value={memberStatus} onChange={e => setMemberStatus(e.target.value)}><option value="all">ทั้งหมด</option><option value="approved">อนุมัติแล้ว</option><option value="pending">รออนุมัติ</option><option value="rejected">ไม่อนุมัติ</option></select></label>
-            <button type="button" className={styles.secondaryButton} disabled={membersLoading || filteredMembers.length === 0} onClick={exportMembers}>ส่งออก CSV (Excel)</button>
+            <div className={styles.actions}><button type="button" className={styles.secondaryButton} disabled={membersLoading || classroomLocked} onClick={() => void openCourse(selectedCourse.id)}>↻ อัปเดตรายชื่อ</button><button type="button" className={styles.secondaryButton} disabled={membersLoading || filteredMembers.length === 0} onClick={exportMembers}>ส่งออก CSV (Excel)</button></div>
           </div>
-          <p className={styles.muted}>พบ {filteredMembers.length} รายการ จากทั้งหมด {members.length} รายการ</p>
+          <p className={styles.muted}>พบ {filteredMembers.length} รายการ จากทั้งหมด {members.length} รายการ · เรียงตามรหัสนักศึกษาจากน้อยไปมาก</p>
           {membersLoading ? <p className={styles.empty}>กำลังโหลดรายชื่อนักศึกษา...</p> : filteredMembers.length === 0 ? <p className={styles.empty}>ไม่พบรายชื่อนักศึกษา</p> : <div className={styles.memberTableWrap}><table className={styles.memberTable}><thead><tr><th>ชื่อ–นามสกุล</th><th>รหัสนักศึกษา</th><th>สถานะ</th><th>การดำเนินการ</th></tr></thead><tbody>{filteredMembers.slice(memberCurrent*10,memberCurrent*10+10).map(m => <tr key={`${m.course_id}-${m.student_id}`}><td>{m.profiles?.full_name ?? 'ไม่พบข้อมูล'}</td><td>{m.profiles?.student_id ?? '-'}</td><td><span className={styles.pill}>{statusText(m.status)}</span></td><td><div className={styles.actions}><button type="button" className={styles.secondaryButton} onClick={() => setSelectedStudentId(m.student_id)}>รายละเอียด</button>{m.status === 'pending' && <><button type="button" disabled={busy} className={styles.primaryButton} onClick={() => void decide(m.course_id,m.student_id,true)}>อนุมัติ</button><button type="button" disabled={busy} className={styles.dangerButton} onClick={() => void decide(m.course_id,m.student_id,false)}>ปฏิเสธ</button></>}{m.status === 'approved' && <button type="button" disabled={busy} className={styles.dangerButton} onClick={() => void removeStudent(m.course_id,m.student_id)}>นำออก</button>}</div></td></tr>)}</tbody></table></div>}
           <Pagination page={memberCurrent} total={filteredMembers.length} onChange={setMemberPage}/>
           {selectedStudent && <div className={styles.studentDetail} role="region" aria-label="รายละเอียดนักศึกษา"><div className={styles.sectionHeading}><h3>ข้อมูลนักศึกษา</h3><button type="button" className={styles.secondaryButton} onClick={() => setSelectedStudentId(null)}>ปิด</button></div><dl className={styles.detailGrid}><dt>ชื่อ–นามสกุล</dt><dd>{selectedStudent.profiles?.full_name ?? '-'}</dd><dt>รหัสนักศึกษา</dt><dd>{selectedStudent.profiles?.student_id ?? '-'}</dd><dt>สถานะในรายวิชา</dt><dd>{statusText(selectedStudent.status)}</dd><dt>รายวิชา</dt><dd>{selectedCourse.code} — {selectedCourse.title}</dd></dl></div>}
