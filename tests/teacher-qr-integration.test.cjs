@@ -52,7 +52,7 @@ Module._load = function(request, parent) {
   if (request === '../lib/supabase') return { db: () => fakeDb };
   if (request === '../lib/messages') return { userMessage: String };
   if (request === '../lib/excel-export') return { downloadExcel: async () => {} };
-  if (['./AttendanceSecurity', './AttendanceAnalytics', './StudentLeaveRequest', './TeacherLeaveApproval', './Pagination', './AdvisingPanel'].includes(request)) return { __esModule: true, default: emptyComponent };
+  if (['./AttendanceSecurity', './AttendanceAnalytics', './StudentLeaveRequest', './TeacherLeaveApproval', './Pagination', './AdvisingPanel', './MaterialsPanel'].includes(request)) return { __esModule: true, default: emptyComponent };
   if (request.endsWith('.css')) return { __esModule: true, default: new Proxy({}, { get: (_, key) => String(key) }) };
   return originalLoad.apply(this, arguments);
 };
