@@ -14,6 +14,7 @@ import TeacherLeaveApproval from './TeacherLeaveApproval';
 import AdvisingPanel from './AdvisingPanel';
 import GradebookPanel from './GradebookPanel';
 import MaterialsPanel from './MaterialsPanel';
+import StudentMaterials from './StudentMaterials';
 
 type Profile = { id: string; full_name: string; student_id: string | null; role: 'teacher' | 'student' };
 type Course = { id: number; code: string; title: string; term: string; status?: string };
@@ -416,6 +417,7 @@ export default function Home() {
             {profile.role === 'teacher' && <button type="button" className={styles.secondaryButton} disabled={membersLoading} onClick={() => void openCourse(c.id)}>จัดการรายวิชา →</button>}
           </article>)}</div>}
         </section>
+        {profile.role === 'student' && <StudentMaterials courses={courses.filter(c => c.status === 'approved')} />}
         {profile.role === 'teacher' && selectedCourse && <section className={`${styles.card} ${styles.coursesSection}`} id="course-management">
           <div className={styles.sectionHeading}><div><p className={styles.eyebrow}>COURSE MANAGEMENT</p><h2>{selectedCourse.code} — {selectedCourse.title}</h2><p className={styles.muted}>Course ID: {selectedCourse.id} · ภาคเรียน {selectedCourse.term}</p></div><button type="button" className={styles.secondaryButton} onClick={closeCourse}>ปิดรายละเอียด</button></div>
           <nav className={compact.tabs} aria-label="งานในรายวิชา">{[['attendance','เช็คชื่อ / คาบเรียน'],['members','นักศึกษา'],['leave','คำขอลา'],['security','เหตุการณ์เช็คชื่อ'],['reports','รายงาน'],['gradebook','ตารางคะแนน']].map(([id,label])=><button key={id} type="button" aria-pressed={workspaceTab===id} onClick={()=>setWorkspaceTab(id)}>{label}</button>)}</nav>

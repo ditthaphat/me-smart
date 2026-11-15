@@ -67,7 +67,7 @@ Module._load = function (request, parent, isMain) {
     if (request === '../lib/supabase') return { db: () => fakeDb };
     if (request === './AttendancePanel') return { __esModule: true, default: FakeAttendance };
     if (request === './MaterialsPanel') return { __esModule: true, default: FakeMaterials };
-    if (['./AttendanceSecurity', './AttendanceAnalytics', './StudentLeaveRequest', './TeacherLeaveApproval', './Pagination', './AdvisingPanel', './GradebookPanel'].includes(request)) {
+    if (['./AttendanceSecurity', './AttendanceAnalytics', './StudentLeaveRequest', './StudentMaterials', './TeacherLeaveApproval', './Pagination', './AdvisingPanel', './GradebookPanel'].includes(request)) {
       return { __esModule: true, default: emptyComponent };
     }
     if (request.endsWith('.css')) return { __esModule: true, default: new Proxy({}, { get: (_, key) => String(key) }) };
