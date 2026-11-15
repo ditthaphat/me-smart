@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../lib/supabase';
 import Pagination from './Pagination';
+import ChapterProgressPanel from './ChapterProgressPanel';
 import styles from './materials.module.css';
 
 type Course = { id: number; code: string; title: string; term: string };
@@ -66,6 +67,7 @@ export default function MaterialsPanel({ teacherId, active }: { teacherId: strin
   const [savedForm, setSavedForm] = useState<Form>(emptyForm);
   const [deletePreview, setDeletePreview] = useState<Material | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [tracking, setTracking] = useState<Material | null>(null);
   const deleteHeading = useRef<HTMLHeadingElement | null>(null);
   const titleInput = useRef<HTMLInputElement | null>(null);
   const dirty = formOpen && JSON.stringify(form) !== JSON.stringify(savedForm);
@@ -126,6 +128,10 @@ export default function MaterialsPanel({ teacherId, active }: { teacherId: strin
     const next = toForm(item); setEditing(item); setForm(next); setSavedForm(next); setFormOpen(true); setDeletePreview(null); setDeleteConfirmation(''); setError(''); setMessage('');
     setTimeout(() => titleInput.current?.focus(), 0);
   }
+  function openProgress(item: Material) {
+    if (!allowDiscard()) return;
+    setFormOpen(false); setEditing(null); setForm(emptyForm()); setSavedForm(emptyForm()); setDeletePreview(null); setDeleteConfirmation(''); setError(''); setMessage(''); setTracking(item);
+  }
   function closeForm() {
     if (!allowDiscard()) return;
     setFormOpen(false); setEditing(null); setForm(emptyForm()); setSavedForm(emptyForm());
@@ -172,6 +178,7 @@ export default function MaterialsPanel({ teacherId, active }: { teacherId: strin
   }
 
   return <section className={styles.root} aria-label="เอกสารการสอน">
+    {tracking ? <ChapterProgressPanel key={tracking.id} teacherId={teacherId} materialId={tracking.id} materialTitle={tracking.title} active={active} onBack={() => setTracking(null)} /> : <>
     <div className={styles.header}><div><p className={styles.eyebrow}>TEACHING MATERIALS</p><h2>เอกสารการสอนและตำรา</h2><p>จัดรายการตำรา บทเรียน และสื่อการสอนแยกตามรายวิชา</p></div><span className={styles.badge}>เฉพาะอาจารย์เจ้าของข้อมูล</span></div>
     <p className={styles.note}>ระบบเก็บรายละเอียดและลิงก์ ไม่ได้อัปโหลดไฟล์ การเปิดไฟล์ขึ้นอยู่กับสิทธิ์ที่กำหนดไว้ในแหล่งเก็บไฟล์</p>
     {(error || coursesError || itemsError) && <p role="alert" className={styles.error}>{error || coursesError || itemsError}</p>}{message && <p role="status" className={styles.success}>{message}</p>}
@@ -192,7 +199,7 @@ export default function MaterialsPanel({ teacherId, active }: { teacherId: strin
       </form>}
       {deletePreview && <form className={styles.deletePreview} onSubmit={e => { e.preventDefault(); void remove(); }} aria-label="ตรวจสอบการลบเอกสาร">
         <h3 ref={deleteHeading} tabIndex={-1}>ตรวจสอบก่อนลบรายการ</h3><p><strong>{deletePreview.title}</strong>{deletePreview.version_label ? ` · เวอร์ชัน ${deletePreview.version_label}` : ''}</p>
-        <p>การลบจะลบรายการออกจาก ME-Smart ถาวร ไฟล์ต้นฉบับที่เก็บใน Google Drive หรือแหล่งอื่นยังคงอยู่</p>
+        <p>การลบจะลบรายการ รวมทั้งข้อมูลความก้าวหน้าของบทและหัวข้อที่เกี่ยวข้องออกจาก ME-Smart ถาวร ไฟล์ต้นฉบับที่เก็บใน Google Drive หรือแหล่งอื่นยังคงอยู่</p>
         <label className={styles.field}>พิมพ์คำว่า ลบ เพื่อยืนยัน<input aria-label="คำยืนยันลบเอกสาร" autoComplete="off" value={deleteConfirmation} onChange={e => setDeleteConfirmation(e.target.value)} /></label>
         <div className={styles.actions}><button type="submit" className={styles.danger} disabled={busy || deleteConfirmation.trim() !== 'ลบ'}>ลบรายการนี้ถาวร</button><button type="button" disabled={busy} onClick={() => { setDeletePreview(null); setDeleteConfirmation(''); }}>ยกเลิก</button></div>
       </form>}
@@ -209,10 +216,11 @@ export default function MaterialsPanel({ teacherId, active }: { teacherId: strin
           <div><h4>{item.title}</h4><p>{course ? `${course.code} · ${course.title} · ${course.term}` : 'ยังไม่ระบุรายวิชา'}</p>
             <div className={styles.tags}><span>{labelFor(types, item.material_type)}</span><span>{labelFor(statuses, item.material_status)}</span>{item.version_label && <span>เวอร์ชัน {item.version_label}</span>}{item.is_archived && <span>เก็บถาวร</span>}</div>
             {item.notes && <p className={styles.itemNotes}>{item.notes}</p>}</div>
-          <div className={styles.actions}>{link && <a href={link} target="_blank" rel="noopener noreferrer">เปิดลิงก์ ↗</a>}<button type="button" disabled={busy} onClick={() => openEdit(item)}>แก้ไข</button><button type="button" disabled={busy} onClick={() => void archive(item)}>{item.is_archived ? 'นำกลับ' : 'เก็บถาวร'}</button><button type="button" className={styles.danger} disabled={busy} aria-label={`ลบ ${item.title}`} onClick={() => previewDelete(item)}>ลบ</button></div>
+          <div className={styles.actions}>{link && <a href={link} target="_blank" rel="noopener noreferrer">เปิดลิงก์ ↗</a>}<button type="button" disabled={busy} onClick={() => openProgress(item)}>ติดตามรายบท</button><button type="button" disabled={busy} onClick={() => openEdit(item)}>แก้ไข</button><button type="button" disabled={busy} onClick={() => void archive(item)}>{item.is_archived ? 'นำกลับ' : 'เก็บถาวร'}</button><button type="button" className={styles.danger} disabled={busy} aria-label={`ลบ ${item.title}`} onClick={() => previewDelete(item)}>ลบ</button></div>
         </article>;
       })}</div> : <p className={styles.empty}>ยังไม่มีรายการเอกสารที่ตรงกับเงื่อนไข</p>}
       <Pagination page={page} total={total} onChange={setPage} />
     </div>
+    </>}
   </section>;
 }
