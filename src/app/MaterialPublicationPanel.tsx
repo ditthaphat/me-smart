@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { db } from '../lib/supabase';
+import { sortStudentsByNumber } from '../lib/student-sort';
 import Pagination from './Pagination';
 import styles from './materials.module.css';
 
@@ -57,7 +58,7 @@ export default function MaterialPublicationPanel({ teacherId, source, courseName
           if (report.error) throw report.error;
           nextStats = (report.data ?? []) as Stat[];
         }
-        if (current) { setPublication(next); setStats(nextStats); setError(''); }
+        if (current) { setPublication(next); setStats(sortStudentsByNumber(nextStats, row => row.student_number, row => `${row.full_name ?? ''}|${row.student_id}`)); setError(''); }
       } catch (e) { if (current) { setError(`โหลดข้อมูลการเผยแพร่ไม่สำเร็จ: ${message(e)}`); setPublication(null); setStats([]); } }
       finally { if (current) setLoading(false); }
     })();
