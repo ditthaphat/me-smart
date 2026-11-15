@@ -15,6 +15,7 @@ type Session = {
 type Status = 'not_recorded' | 'present' | 'absent' | 'leave';
 type Participant = { session_id: number; student_id: number; student_number_snapshot: string; full_name_snapshot: string; attendance_status: Status };
 type StudentDeletionPreview = { student_id: number; group_id: number; student_number: string; full_name: string; participant_count: number; recorded_count: number; fingerprint: string };
+type SessionDeletionPreview = { session_id: number; group_id: number; meeting_date: string; start_time: string | null; end_time: string | null; location: string; is_archived: boolean; participant_count: number; recorded_count: number; fingerprint: string };
 type SessionForm = {
   meeting_date: string; start_time: string; end_time: string; location: string; advisor1: string; advisor2: string; advisor3: string;
   discussion: string; recommendations: string; next_meeting_date: string; next_meeting_time: string; next_meeting_note: string;
@@ -76,6 +77,9 @@ export default function AdvisingPanel({ teacherId, teacherName }: { teacherId: s
   const [deletePreview, setDeletePreview] = useState<StudentDeletionPreview | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const deletePreviewHeading = useRef<HTMLHeadingElement | null>(null);
+  const [sessionDeletePreview, setSessionDeletePreview] = useState<SessionDeletionPreview | null>(null);
+  const [sessionDeleteConfirmation, setSessionDeleteConfirmation] = useState('');
+  const sessionDeleteHeading = useRef<HTMLHeadingElement | null>(null);
   const [studentSearch, setStudentSearch] = useState('');
   const [studentPage, setStudentPage] = useState(0);
   const [participantPage, setParticipantPage] = useState(0);
@@ -135,6 +139,7 @@ export default function AdvisingPanel({ teacherId, teacherName }: { teacherId: s
   useEffect(() => { setSessionPage(0); }, [showArchivedSessions, groupId]);
   useEffect(() => { setParticipantPage(0); }, [sessionId]);
   useEffect(() => { if (deletePreview) deletePreviewHeading.current?.focus(); }, [deletePreview]);
+  useEffect(() => { if (sessionDeletePreview) sessionDeleteHeading.current?.focus(); }, [sessionDeletePreview]);
 
   const filteredStudents = useMemo(() => {
     const q = studentSearch.trim().toLocaleLowerCase();
@@ -160,7 +165,7 @@ export default function AdvisingPanel({ teacherId, teacherName }: { teacherId: s
   }
   function chooseGroup(id: number | null) {
     if (!allowLeaveEditor()) return;
-    setGroupId(id); setSessionId(null); setEditorOpen(false); setShowPrintPreview(false); setEditGroup(false); setEditStudent(null); setDeletePreview(null); setDeleteConfirmation(''); setRosterInput('');
+    setGroupId(id); setSessionId(null); setEditorOpen(false); setShowPrintPreview(false); setEditGroup(false); setEditStudent(null); setDeletePreview(null); setDeleteConfirmation(''); setSessionDeletePreview(null); setSessionDeleteConfirmation(''); setRosterInput('');
   }
   async function saveGroup() {
     if (!groupName.trim()) { setError('กรุณากรอกชื่อกลุ่ม'); return; }
@@ -245,11 +250,11 @@ export default function AdvisingPanel({ teacherId, teacherName }: { teacherId: s
   }
   function newSession() {
     if (!allowLeaveEditor()) return;
-    const next = emptyForm(teacherName); setSessionId(null); setForm(next); setSavedForm(next); setEditorOpen(true); setShowPrintPreview(false); setParticipants([]);
+    const next = emptyForm(teacherName); setSessionId(null); setForm(next); setSavedForm(next); setEditorOpen(true); setShowPrintPreview(false); setParticipants([]); setSessionDeletePreview(null); setSessionDeleteConfirmation('');
   }
   function openSession(s: Session) {
     if (!allowLeaveEditor()) return;
-    const next = toForm(s); setForm(next); setSavedForm(next); setSessionId(s.id); setEditorOpen(true); setShowPrintPreview(false); setError(''); setMessage('');
+    const next = toForm(s); setForm(next); setSavedForm(next); setSessionId(s.id); setEditorOpen(true); setShowPrintPreview(false); setSessionDeletePreview(null); setSessionDeleteConfirmation(''); setError(''); setMessage('');
   }
   async function syncParticipants(id: number, rows: Student[]) {
     if (groupId === null || rows.length === 0) return;
@@ -301,6 +306,34 @@ export default function AdvisingPanel({ teacherId, teacherName }: { teacherId: s
       if (e) throw e; setRefresh(v => v + 1); setMessage(selectedSession.is_archived ? 'นำบันทึกกลับมาแล้ว' : 'เก็บบันทึกถาวรแล้ว');
     });
   }
+  async function previewDeleteSession(session: Session) {
+    if (!allowLeaveEditor()) return;
+    await run(async () => {
+      const { data, error: e } = await db().rpc('preview_advising_session_deletion', { p_session_id: session.id });
+      if (e) throw e;
+      const preview = data as SessionDeletionPreview | null;
+      if (!preview || Number(preview.session_id) !== session.id || Number(preview.group_id) !== session.group_id) throw new Error('ไม่สามารถตรวจสอบบันทึกนี้ กรุณาอัปเดตแล้วลองใหม่');
+      setEditorOpen(false); setSessionId(null); setShowPrintPreview(false);
+      setSessionDeletePreview(preview); setSessionDeleteConfirmation('');
+    });
+  }
+  async function deleteSession() {
+    if (!sessionDeletePreview || sessionDeletePreview.group_id !== groupId || sessionDeleteConfirmation.trim() !== 'ลบ') return;
+    await run(async () => {
+      const { data, error: e } = await db().rpc('delete_advising_session', {
+        p_session_id: sessionDeletePreview.session_id,
+        p_expected_group_id: sessionDeletePreview.group_id,
+        p_expected_fingerprint: sessionDeletePreview.fingerprint,
+        p_confirmation: sessionDeleteConfirmation.trim(),
+      });
+      if (e) {
+        if (e.message?.includes('เปลี่ยนไป')) { setSessionDeletePreview(null); setSessionDeleteConfirmation(''); }
+        throw e;
+      }
+      if (!data || Number(data.session_id) !== sessionDeletePreview.session_id) throw new Error('ไม่สามารถยืนยันผลการลบ กรุณาอัปเดตรายการ');
+      setSessionDeletePreview(null); setSessionDeleteConfirmation(''); setRefresh(v => v + 1); setMessage('ลบบันทึกการปรึกษาแล้ว');
+    });
+  }
 
   return <section className={styles.root} aria-label="งานอาจารย์ที่ปรึกษา">
     <div className={styles.header}><div><p className={styles.eyebrow}>STUDENT ADVISING</p><h2>งานอาจารย์ที่ปรึกษา</h2><p>บันทึกการให้คำปรึกษารายกลุ่มตามแบบ ทป.คก.01.06.2568</p></div><span className={styles.owner}>เฉพาะอาจารย์เจ้าของข้อมูล</span></div>
@@ -334,9 +367,18 @@ export default function AdvisingPanel({ teacherId, teacherName }: { teacherId: s
         <Pagination page={studentCurrent} total={filteredStudents.length} onChange={setStudentPage} />
       </div>
       <div hidden={workspace !== 'sessions'} className={styles.stack}>
-        <div className={styles.card}><div className={styles.sectionTitle}><div><h3>บันทึกการให้คำปรึกษา</h3><p>เลือกบันทึกเดิมหรือสร้างบันทึกครั้งใหม่</p></div><button type="button" className={styles.primary} disabled={group.is_archived} onClick={newSession}>+ สร้างบันทึก</button></div>
+        <div className={styles.card}><div className={styles.sectionTitle}><div><h3>บันทึกการให้คำปรึกษา</h3><p>เลือกบันทึกเดิมหรือสร้างบันทึกครั้งใหม่</p></div><button type="button" className={styles.primary} disabled={busy || group.is_archived} onClick={newSession}>+ สร้างบันทึก</button></div>
           <label className={styles.check}><input type="checkbox" checked={showArchivedSessions} onChange={e => setShowArchivedSessions(e.target.checked)} /> แสดงบันทึกที่เก็บถาวร</label>
-          {visibleSessions.length ? <div className={styles.list}>{visibleSessions.slice(sessionCurrent * 10, sessionCurrent * 10 + 10).map(s => <div className={styles.listItem} key={s.id}><div><strong>{thaiDate(s.meeting_date)}</strong><p>{s.location || 'ไม่ได้ระบุสถานที่'}{s.is_archived ? ' · เก็บถาวร' : ''}</p></div><button type="button" onClick={() => openSession(s)}>เปิดบันทึก</button></div>)}</div> : <p className={styles.empty}>ยังไม่มีบันทึกการปรึกษา</p>}
+          {sessionDeletePreview && <form onSubmit={e => { e.preventDefault(); void deleteSession(); }} className={styles.deletePreview} aria-label="ตรวจสอบการลบบันทึกการปรึกษา">
+            <h4 ref={sessionDeleteHeading} tabIndex={-1}>ตรวจสอบก่อนลบบันทึกถาวร</h4>
+            <p><strong>บันทึกหมายเลข {sessionDeletePreview.session_id} · {thaiDate(sessionDeletePreview.meeting_date)}</strong><br />เวลา {sessionDeletePreview.start_time?.slice(0, 5) || '—'} – {sessionDeletePreview.end_time?.slice(0, 5) || '—'} น. · สถานที่ {sessionDeletePreview.location || 'ไม่ได้ระบุ'}</p>
+            <p>บันทึกนี้มีรายชื่อผู้เข้าร่วม {sessionDeletePreview.participant_count} รายการ (บันทึกสถานะแล้ว {sessionDeletePreview.recorded_count} รายการ รวมผู้ที่ไม่เข้าร่วมและลา)</p>
+            <p>การลบจะลบข้อความการปรึกษา ข้อสรุป นัดหมาย และสถานะผู้เข้าร่วมของครั้งนี้ถาวร จึงพิมพ์บันทึกนี้จากระบบอีกไม่ได้</p>
+            <p>รายชื่อนักศึกษาในกลุ่ม บันทึกครั้งอื่น บัญชีนักศึกษา รายวิชา การเช็กชื่อ และคะแนนยังอยู่ หากต้องการเก็บประวัติ ให้เลือกเก็บบันทึกถาวรแทน</p>
+            <label className={styles.field}>พิมพ์คำว่า ลบ เพื่อยืนยัน<input aria-label="คำยืนยันลบบันทึกการปรึกษา" autoComplete="off" value={sessionDeleteConfirmation} onChange={e => setSessionDeleteConfirmation(e.target.value)} /></label>
+            <div className={styles.actions}><button type="submit" className={styles.danger} disabled={busy || sessionDeleteConfirmation.trim() !== 'ลบ'}>ลบบันทึกนี้ถาวร</button><button type="button" disabled={busy} onClick={() => { setSessionDeletePreview(null); setSessionDeleteConfirmation(''); }}>ยกเลิก</button></div>
+          </form>}
+          {visibleSessions.length ? <div className={styles.list}>{visibleSessions.slice(sessionCurrent * 10, sessionCurrent * 10 + 10).map(s => <div className={styles.listItem} key={s.id}><div><strong>{thaiDate(s.meeting_date)}</strong><p>หมายเลขบันทึก {s.id} · {s.location || 'ไม่ได้ระบุสถานที่'}{s.is_archived ? ' · เก็บถาวร' : ''}</p></div><div className={styles.actions}><button type="button" disabled={busy || detailLoading} onClick={() => openSession(s)}>เปิดบันทึก</button><button type="button" className={styles.danger} disabled={busy || detailLoading} aria-label={`ลบบันทึก ${thaiDate(s.meeting_date)} หมายเลข ${s.id}`} onClick={() => void previewDeleteSession(s)}>ลบ</button></div></div>)}</div> : <p className={styles.empty}>ยังไม่มีบันทึกการปรึกษา</p>}
           <Pagination page={sessionCurrent} total={visibleSessions.length} onChange={setSessionPage} />
         </div>
         {editorOpen && <div className={styles.card}><div className={styles.sectionTitle}><div><h3>{sessionId === null ? 'สร้างบันทึกการปรึกษา' : 'รายละเอียดการปรึกษา'}</h3><p>แบบบันทึกการให้คำปรึกษาเป็นรายกลุ่ม</p></div>{selectedSession && <button type="button" disabled={busy} onClick={() => void archiveSession()}>{selectedSession.is_archived ? 'นำบันทึกกลับ' : 'เก็บบันทึกถาวร'}</button>}</div>
