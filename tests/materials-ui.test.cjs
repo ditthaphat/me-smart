@@ -41,6 +41,7 @@ Module._load=function(request,parent){
   if(parent&&parent.filename.endsWith(path.join('src','app','MaterialsPanel.tsx'))){
     if(request==='../lib/supabase')return {db:()=>({from:query})};
     if(request==='./Pagination')return {__esModule:true,default:({page,total,onChange})=>React.createElement('nav',null,React.createElement('span',null,`หน้า ${page+1} จาก ${total}`),React.createElement('button',{type:'button',onClick:()=>onChange(page+1)},'ถัดไป'))};
+    if(request==='./ChapterProgressPanel')return {__esModule:true,default:({materialTitle,onBack})=>React.createElement('section',{'data-testid':'progress-panel'},materialTitle,React.createElement('button',{type:'button',onClick:onBack},'กลับ'))};
     if(request.endsWith('.css'))return {__esModule:true,default:new Proxy({},{get:(_,key)=>String(key)})};
   }
   return originalLoad.apply(this,arguments);
@@ -73,6 +74,9 @@ test('teacher manages an external teaching document without uploading or losing 
   await submit(form); assert.equal(records.teaching_materials.length,1);
   assert.equal(records.teaching_materials[0].course_id,5);
   let link=root.findByType('a'); assert.equal(link.props.href,'https://drive.google.com/file/d/example/view'); assert.equal(link.props.rel,'noopener noreferrer');
+  await act(async()=>{button(root,'ติดตามรายบท').props.onClick();});
+  assert.match(textOf(root.findByProps({'data-testid':'progress-panel'})),/ตำรากลศาสตร์ของไหล/);
+  await act(async()=>{button(root,'กลับ').props.onClick();});
   await act(async()=>{button(root,'แก้ไข').props.onClick();});
   form=root.findByProps({'aria-label':'แก้ไขเอกสาร'});
   await change(inputIn(form,'เวอร์ชัน','input'),'2.0');
@@ -89,7 +93,7 @@ test('teacher manages an external teaching document without uploading or losing 
   await act(async()=>{archived.props.onChange({target:{checked:true}});});
   await act(async()=>{root.findByProps({'aria-label':'ลบ ตำรากลศาสตร์ของไหล'}).props.onClick();});
   form=root.findByProps({'aria-label':'ตรวจสอบการลบเอกสาร'});
-  assert.match(textOf(form),/ไฟล์ต้นฉบับ/);
+  assert.match(textOf(form),/ไฟล์ต้นฉบับ/); assert.match(textOf(form),/ความก้าวหน้าของบทและหัวข้อ/);
   assert.equal(button(form,'ลบรายการนี้ถาวร').props.disabled,true);
   await submit(form); assert.equal(records.teaching_materials.length,1);
   await change(form.findByProps({'aria-label':'คำยืนยันลบเอกสาร'}),'ลบ');
