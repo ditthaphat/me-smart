@@ -15,6 +15,7 @@ import TeacherLeaveApproval from './TeacherLeaveApproval';
 import AdvisingPanel from './AdvisingPanel';
 import GradebookPanel from './GradebookPanel';
 import MaterialsPanel from './MaterialsPanel';
+import ResearchPanel from './ResearchPanel';
 import StudentMaterials from './StudentMaterials';
 
 type Profile = { id: string; full_name: string; student_id: string | null; role: 'teacher' | 'student' };
@@ -34,7 +35,6 @@ const teacherTabs = [
 type TeacherTab = (typeof teacherTabs)[number]['id'];
 
 const futureTeacherAreas: { id: TeacherTab; title: string; description: string }[] = [
-  { id: 'research', title: 'งานวิจัย', description: 'พื้นที่สำหรับติดตามโครงการวิจัย เอกสาร และกำหนดส่งที่เกี่ยวข้อง' },
   { id: 'planner', title: 'งานและปฏิทิน', description: 'พื้นที่สำหรับติดตามงาน นัดหมาย และกำหนดการสำคัญ' },
 ];
 
@@ -52,6 +52,7 @@ export default function Home() {
   const [teacherTab, setTeacherTab] = useState<TeacherTab>('overview');
   const [advisingVisited, setAdvisingVisited] = useState(false);
   const [materialsVisited, setMaterialsVisited] = useState(false);
+  const [researchVisited, setResearchVisited] = useState(false);
   const [workspaceTab,setWorkspaceTab]=useState('attendance');
   const [memberPage,setMemberPage]=useState(0);
   const [user, setUser] = useState<string | null>(null);
@@ -159,6 +160,7 @@ export default function Home() {
     setError('');
     if (next === 'advising') setAdvisingVisited(true);
     if (next === 'materials') setMaterialsVisited(true);
+    if (next === 'research') setResearchVisited(true);
     setTeacherTab(next);
     return true;
   }
@@ -353,6 +355,9 @@ export default function Home() {
           </div>
           <div id="teacher-panel-advising" role="tabpanel" aria-labelledby="teacher-tab-advising" hidden={teacherTab !== 'advising'}>
             {advisingVisited && <AdvisingPanel teacherId={profile.id} teacherName={profile.full_name} />}
+          </div>
+          <div id="teacher-panel-research" role="tabpanel" aria-labelledby="teacher-tab-research" hidden={teacherTab !== 'research'}>
+            {researchVisited && <ResearchPanel teacherId={profile.id} active={teacherTab === 'research'} />}
           </div>
           <div id="teacher-panel-materials" role="tabpanel" aria-labelledby="teacher-tab-materials" hidden={teacherTab !== 'materials'}>
             {materialsVisited && <MaterialsPanel teacherId={profile.id} active={teacherTab === 'materials'} />}

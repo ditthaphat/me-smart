@@ -69,7 +69,7 @@ Module._load = function (request, parent, isMain) {
     if (request === './AttendancePanel') return { __esModule: true, default: FakeAttendance };
     if (request === './MaterialsPanel') return { __esModule: true, default: FakeMaterials };
     if (request === './Pagination') return { __esModule: true, default: ({page,onChange}) => React.createElement('nav', null, React.createElement('button', {'data-testid':'next-page',onClick:()=>onChange(page+1)},'ถัดไป')) };
-    if (['./AttendanceSecurity', './AttendanceAnalytics', './StudentLeaveRequest', './StudentMaterials', './TeacherLeaveApproval', './AdvisingPanel', './GradebookPanel'].includes(request)) {
+    if (['./AttendanceSecurity', './AttendanceAnalytics', './StudentLeaveRequest', './StudentMaterials', './TeacherLeaveApproval', './AdvisingPanel', './GradebookPanel', './ResearchPanel'].includes(request)) {
       return { __esModule: true, default: emptyComponent };
     }
     if (request.endsWith('.css')) return { __esModule: true, default: new Proxy({}, { get: (_, key) => String(key) }) };
