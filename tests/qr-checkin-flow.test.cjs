@@ -97,6 +97,38 @@ test('teacher QR supplies both parameters to the student check-in flow', async (
   }
 });
 
+test('the teacher displays the same QR beyond the old 20-second rotation period', async () => {
+  const originalSetInterval=globalThis.setInterval;
+  const originalClearInterval=globalThis.clearInterval;
+  const originalNow=Date.now;
+  const timers=new Map();
+  let nextTimer=0;
+  let clock=originalNow();
+  globalThis.setInterval=(fn,delay)=>{const id=++nextTimer;timers.set(id,{fn,delay});return id;};
+  globalThis.clearInterval=id=>timers.delete(id);
+  Date.now=()=>clock;
+  let teacher;
+  const begin=rpcCalls.length;
+  try {
+    await act(async()=>{teacher=create(React.createElement(Teacher,{session,courseCode:'TEST',onLockChange(){}}));});
+    const open=teacher.root.findAllByType('button').find(b=>b.children.includes('เปิดรับเช็คชื่อ'));
+    await act(async()=>{open.props.onClick();});
+    const before=teacher.root.findByProps({'data-testid':'rendered-qr'}).props['data-value'];
+    assert.equal(rpcCalls.slice(begin).filter(c=>c.name==='smart_rotate_qr').length,1);
+    clock+=31000;
+    await act(async()=>{for(const timer of [...timers.values()])timer.fn();});
+    assert.equal(teacher.root.findByProps({'data-testid':'rendered-qr'}).props['data-value'],before);
+    assert.equal(rpcCalls.slice(begin).filter(c=>c.name==='smart_rotate_qr').length,1,
+      'no second QR is issued simply because 20 seconds elapsed');
+    assert.ok(teacher.root.findAllByType('small').some(n=>String(n.children).includes('จนกว่าจะปิดรับ')));
+  } finally {
+    if(teacher)await act(async()=>teacher.unmount());
+    globalThis.setInterval=originalSetInterval;
+    globalThis.clearInterval=originalClearInterval;
+    Date.now=originalNow;
+  }
+});
+
 test('student check-in accepts a link with separate session and token parameters', async () => {
   window.location.search = '?session=123&token=previous-token';
   let student;

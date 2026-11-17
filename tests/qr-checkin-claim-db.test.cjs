@@ -31,7 +31,8 @@ test('a QR verified before GPS stays bound to the student, window, policy and on
       CREATE TABLE public.attendance_security_events(session_id bigint,student_id uuid,outcome text,distance_m double precision,accuracy_m double precision);
       CREATE TABLE public.smart_attendance_windows(
         session_id bigint PRIMARY KEY,is_open boolean,opened_at timestamptz,closes_at timestamptz,
-        late_after_minutes integer,require_location boolean,latitude double precision,longitude double precision,radius_m integer
+        late_after_minutes integer,require_location boolean,latitude double precision,longitude double precision,radius_m integer,
+        teacher_id uuid,qr_hash text,qr_expires_at timestamptz,updated_at timestamptz
       );
       CREATE TABLE public.smart_attendance_qr_tokens(
         session_id bigint,window_opened_at timestamptz,token_hash text,expires_at timestamptz,
@@ -41,17 +42,38 @@ test('a QR verified before GPS stays bound to the student, window, policy and on
         ('${teacher}','teacher'),('${student}','student'),('${otherStudent}','student'),('${outsider}','student');
       INSERT INTO public.courses VALUES(1,'${teacher}');
       INSERT INTO public.enrollments VALUES(1,'${student}','approved'),(1,'${otherStudent}','approved'),(1,'${outsider}','pending');
-      INSERT INTO public.attendance_sessions SELECT n,1,false FROM generate_series(101,112) n;
+      INSERT INTO public.attendance_sessions SELECT n,1,false FROM generate_series(101,117) n;
       INSERT INTO public.smart_attendance_windows
-        SELECT n,true,now()-interval '10 seconds',now()+interval '15 minutes',10,n NOT IN (102,112),13.7563,100.5018,150
-        FROM generate_series(101,112) n;
+        (session_id,is_open,opened_at,closes_at,late_after_minutes,require_location,latitude,longitude,radius_m,teacher_id)
+        SELECT n,true,now()-interval '2 minutes',now()+interval '15 minutes',10,n NOT IN (102,112,113),13.7563,100.5018,150,'${teacher}'
+        FROM generate_series(101,117) n;
       INSERT INTO public.smart_attendance_qr_tokens
         SELECT session_id,opened_at,encode(extensions.digest('qr-'||session_id,'sha256'),'hex'),now()+interval '30 seconds'
         FROM public.smart_attendance_windows;
+      CREATE FUNCTION public.capture_attendance_qr_token() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NOT NEW.is_open OR NEW.qr_hash IS NULL THEN
+          DELETE FROM public.smart_attendance_qr_tokens WHERE session_id=NEW.session_id;
+          RETURN NEW;
+        END IF;
+        DELETE FROM public.smart_attendance_qr_tokens WHERE session_id=NEW.session_id
+          AND (expires_at<=clock_timestamp() OR window_opened_at<>NEW.opened_at);
+        IF NEW.qr_expires_at IS NOT NULL THEN
+          INSERT INTO public.smart_attendance_qr_tokens(session_id,window_opened_at,token_hash,expires_at)
+          VALUES(NEW.session_id,NEW.opened_at,NEW.qr_hash,LEAST(NEW.qr_expires_at,NEW.closes_at))
+          ON CONFLICT (session_id,token_hash) DO NOTHING;
+        END IF;
+        RETURN NEW;
+      END $$;
+      CREATE TRIGGER capture_attendance_qr_token
+        AFTER INSERT OR UPDATE OF qr_hash,qr_expires_at,is_open,opened_at,closes_at
+        ON public.smart_attendance_windows
+        FOR EACH ROW EXECUTE FUNCTION public.capture_attendance_qr_token();
     `);
     await db.exec(read('fixtures/smart_checkin.sql'));
     await db.exec(read('fixtures/smart_checkin_v7.sql'));
     await db.exec(read('../docs/database/qr-checkin-claim.sql'));
+    await db.exec(read('../docs/database/qr-valid-until-close.sql'));
 
     async function asUser(id, role='authenticated') {
       await db.exec('reset role');
@@ -149,5 +171,60 @@ test('a QR verified before GPS stays bound to the student, window, policy and on
     await db.query('delete from public.attendance_sessions where id=109');
     assert.equal((await db.query('select count(*)::int as n from me_smart_private.qr_checkin_claims where session_id=109')).rows[0].n,0,
       'deleting a cancelled test session cleans up its temporary claim');
+
+    await asUser(teacher);
+    const qr = (await db.query('select public.smart_rotate_qr(113) as token')).rows[0].token;
+    const secondQr = (await db.query('select public.smart_rotate_qr(113) as token')).rows[0].token;
+    assert.notEqual(qr,secondQr,'a teacher refresh creates a separate secure token');
+    const expiry = (await root(`select q.expires_at, w.closes_at,
+      q.expires_at > clock_timestamp()+interval '90 seconds' as past_old_limits
+      from public.smart_attendance_qr_tokens q join public.smart_attendance_windows w using(session_id)
+      where q.session_id=113 and q.token_hash=encode(extensions.digest($1,'sha256'),'hex')`,[qr])).rows[0];
+    assert.equal(new Date(expiry.expires_at).getTime(),new Date(expiry.closes_at).getTime(),
+      'an issued QR remains valid to the actual end of the window');
+    assert.equal(expiry.past_old_limits,true,'the QR lifetime is longer than the old 30-second limit');
+    await asUser(student);
+    const longClaim = await prepare(113,qr);
+    assert.equal(longClaim.ok,true,'a QR remains valid after a teacher refresh');
+    assert.equal(new Date(longClaim.expires_at).getTime(),new Date(expiry.closes_at).getTime(),
+      'the student claim also lasts until the window closes, beyond the old 90-second limit');
+    assert.equal((await finish(113,longClaim.claim)).code,'accepted_present','no GPS check-in succeeds');
+    await asUser(otherStudent);
+    assert.equal((await finish(113,(await prepare(113,secondQr)).claim)).code,'accepted_present',
+      'a second approved student can use the latest QR');
+
+    await asUser(teacher);
+    const gpsQr = (await db.query('select public.smart_rotate_qr(114) as token')).rows[0].token;
+    await asUser(student);
+    const gpsClaim = await prepare(114,gpsQr);
+    assert.equal((await finish(114,gpsClaim.claim,13.7663,100.5018,5)).code,'outside_zone',
+      'extending QR lifetime never bypasses the GPS boundary');
+    assert.equal((await finish(114,gpsClaim.claim,13.7563,100.5018,5)).code,'accepted_present');
+    await asUser(outsider);
+    assert.equal((await prepare(114,gpsQr)).code,'not_enrolled');
+    await assert.rejects(db.query('select public.smart_rotate_qr(114)'),/not authorized/i);
+
+    await asUser(teacher);
+    const closingQr = (await db.query('select public.smart_rotate_qr(115) as token')).rows[0].token;
+    await asUser(student);
+    const closingClaim = await prepare(115,closingQr);
+    await root('update public.smart_attendance_windows set is_open=false where session_id=115');
+    await asUser(student);
+    assert.equal((await finish(115,closingClaim.claim,13.7563,100.5018,5)).code,'closed',
+      'closing early prevents a previously prepared claim from checking in');
+    assert.equal((await prepare(115,closingQr)).code,'closed');
+
+    await asUser(teacher);
+    const expiredQr = (await db.query('select public.smart_rotate_qr(116) as token')).rows[0].token;
+    await root("update public.smart_attendance_windows set closes_at=now()-interval '1 second' where session_id=116");
+    await asUser(student);
+    assert.equal((await prepare(116,expiredQr)).code,'closed','a QR expires at the end of its window');
+
+    await asUser(teacher);
+    const previousWindowQr = (await db.query('select public.smart_rotate_qr(117) as token')).rows[0].token;
+    await root('update public.smart_attendance_windows set is_open=false,qr_hash=null,qr_expires_at=null where session_id=117');
+    await root("update public.smart_attendance_windows set is_open=true,opened_at=clock_timestamp(),closes_at=clock_timestamp()+interval '15 minutes' where session_id=117");
+    await asUser(student);
+    assert.equal((await prepare(117,previousWindowQr)).code,'invalid_qr','a QR from an earlier window cannot be reused');
   } finally { await db.close(); }
 });

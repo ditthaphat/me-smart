@@ -1,6 +1,6 @@
--- The rotating QR is still verified against the current window and its original
--- 30-second expiry. A separate, short-lived claim is bound to the authenticated
--- student so GPS acquisition can finish after that QR has rotated.
+-- A QR and the student-bound claim remain valid until the attendance window
+-- closes. Install qr-valid-until-close.sql after this file to configure the
+-- teacher-issued QR lifetime as well.
 CREATE TABLE IF NOT EXISTS me_smart_private.qr_checkin_claims (
   session_id bigint NOT NULL REFERENCES public.attendance_sessions(id) ON DELETE CASCADE,
   student_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -54,7 +54,7 @@ BEGIN
   END IF;
 
   v_claim := pg_catalog.gen_random_uuid()::text || '-' || pg_catalog.gen_random_uuid()::text;
-  v_expires := LEAST(clock_timestamp()+interval '90 seconds',v_window.closes_at);
+  v_expires := v_window.closes_at;
   DELETE FROM me_smart_private.qr_checkin_claims
   WHERE session_id=p_session_id AND expires_at<=clock_timestamp();
   INSERT INTO me_smart_private.qr_checkin_claims(session_id,student_id,window_opened_at,claim_hash,expires_at)
