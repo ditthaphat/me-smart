@@ -17,6 +17,7 @@ import GradebookPanel from './GradebookPanel';
 import MaterialsPanel from './MaterialsPanel';
 import ResearchPanel from './ResearchPanel';
 import StudentMaterials from './StudentMaterials';
+import StudentGradebook from './StudentGradebook';
 
 type Profile = { id: string; full_name: string; student_id: string | null; role: 'teacher' | 'student' };
 type Course = { id: number; code: string; title: string; term: string; status?: string };
@@ -80,6 +81,7 @@ export default function Home() {
   const [joinCode, setJoinCode] = useState('');
   const [courseId, setCourseId] = useState('');
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
+  const [studentGradeCourseId,setStudentGradeCourseId]=useState<number|null>(null);
   const [members, setMembers] = useState<CourseMember[]>([]);
   const [memberSearch, setMemberSearch] = useState('');
   const [membersLoading, setMembersLoading] = useState(false);
@@ -93,7 +95,7 @@ export default function Home() {
       setError('');
       setUser(u?.id ?? null);
       if (!u) {
-        setProfile(null); setCourses([]); setRequests([]); setApproved([]); setSelectedCourseId(null); setMembers([]);
+        setProfile(null); setCourses([]); setRequests([]); setApproved([]); setSelectedCourseId(null); setStudentGradeCourseId(null); setMembers([]);
         return;
       }
       const { data: p, error: profileError } = await db().from('profiles')
@@ -234,7 +236,7 @@ export default function Home() {
     await run(async () => {
       const { error: e } = await db().auth.signOut();
       if (e) throw e;
-      setUser(null); setProfile(null); setCourses([]); setRequests([]); setApproved([]); setSelectedCourseId(null); setMembers([]);
+      setUser(null); setProfile(null); setCourses([]); setRequests([]); setApproved([]); setSelectedCourseId(null); setStudentGradeCourseId(null); setMembers([]);
       setTeacherTab('overview'); setWorkspaceTab('attendance'); setAdvisingVisited(false);
     });
   }
@@ -262,6 +264,8 @@ export default function Home() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const selectedCourse = courses.find(c => c.id === selectedCourseId);
+  const studentGradeCourse = profile?.role==='student'
+    ? courses.find(c=>c.id===studentGradeCourseId&&c.status==='approved') : undefined;
   const filteredMembers = members.filter(m => {
     const q = memberSearch.trim().toLocaleLowerCase();
     return (memberStatus === 'all' || m.status === memberStatus) && (!q || [m.profiles?.full_name, m.profiles?.student_id, m.student_id].some(v => (v ?? '').toLocaleLowerCase().includes(q)));
@@ -421,8 +425,10 @@ export default function Home() {
             <div className={styles.courseTileTop}><span className={styles.pill}>Course ID: {c.id}</span>{c.status && <span className={styles.pill}>{statusText(c.status)}</span>}</div>
             <h3>{c.code} — {c.title}</h3><p className={styles.muted}>ภาคเรียน {c.term}</p>
             {profile.role === 'teacher' && <button type="button" className={styles.secondaryButton} disabled={membersLoading} onClick={() => void openCourse(c.id)}>จัดการรายวิชา →</button>}
+            {profile.role === 'student' && c.status === 'approved' && <button type="button" className={styles.secondaryButton} aria-expanded={studentGradeCourseId===c.id} aria-controls={studentGradeCourseId===c.id?'student-gradebook':undefined} onClick={()=>setStudentGradeCourseId(current=>current===c.id?null:c.id)}>{studentGradeCourseId===c.id?'ปิดตารางคะแนน':'ดูคะแนนของฉัน →'}</button>}
           </article>)}</div>}
         </section>
+        {profile.role === 'student' && studentGradeCourse && <div id="student-gradebook"><StudentGradebook key={`${profile.id}-${studentGradeCourse.id}`} userId={profile.id} course={studentGradeCourse}/></div>}
         {profile.role === 'student' && <StudentMaterials courses={courses.filter(c => c.status === 'approved')} />}
         {profile.role === 'teacher' && selectedCourse && <section className={`${styles.card} ${styles.coursesSection}`} id="course-management">
           <div className={styles.sectionHeading}><div><p className={styles.eyebrow}>COURSE MANAGEMENT</p><h2>{selectedCourse.code} — {selectedCourse.title}</h2><p className={styles.muted}>Course ID: {selectedCourse.id} · ภาคเรียน {selectedCourse.term}</p></div><button type="button" className={styles.secondaryButton} onClick={closeCourse}>ปิดรายละเอียด</button></div>

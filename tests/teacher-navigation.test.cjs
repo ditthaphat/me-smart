@@ -19,6 +19,7 @@ const students = Array.from({ length: 40 }, (_, i) => ({
   profiles: { full_name: `นักศึกษา ${i + 1}`, student_id: String(i + 1) },
 }));
 const course = { id: 5, code: '4112203', title: 'Fluid Mechanics', term: '2/2569', status: 'approved' };
+let studentCourses=[course];
 
 function query(table) {
   const filters = {};
@@ -45,7 +46,7 @@ const fakeDb = {
     signOut: async () => ({ error: null }),
   },
   from: query,
-  rpc: async name => ({ data: name === 'my_courses' ? [course] : null, error: null }),
+  rpc: async name => ({ data: name === 'my_courses' ? studentCourses : null, error: null }),
 };
 
 function FakeAttendance({ onLockChange }) {
@@ -68,6 +69,7 @@ Module._load = function (request, parent, isMain) {
     if (request === '../lib/supabase') return { db: () => fakeDb };
     if (request === './AttendancePanel') return { __esModule: true, default: FakeAttendance };
     if (request === './MaterialsPanel') return { __esModule: true, default: FakeMaterials };
+    if (request === './StudentGradebook') return { __esModule: true, default: ({userId,course}) => React.createElement('div',{'data-testid':'my-gradebook','data-user':userId,'data-course':course.id}) };
     if (request === './Pagination') return { __esModule: true, default: ({page,onChange}) => React.createElement('nav', null, React.createElement('button', {'data-testid':'next-page',onClick:()=>onChange(page+1)},'ถัดไป')) };
     if (['./AttendanceSecurity', './AttendanceAnalytics', './StudentLeaveRequest', './StudentMaterials', './TeacherLeaveApproval', './AdvisingPanel', './GradebookPanel', './ResearchPanel'].includes(request)) {
       return { __esModule: true, default: emptyComponent };
@@ -141,7 +143,30 @@ test('student dashboard keeps its course list without teacher navigation', async
   assert.equal(root.findAllByProps({ 'data-testid': 'materials-draft' }).length, 0);
   assert.ok(root.findAllByType('h2').some(node => node.children.includes('รายวิชาของฉัน')));
   assert.ok(root.findAllByType('h3').some(node => node.children.includes('Fluid Mechanics')));
+  assert.equal(root.findAllByProps({'data-testid':'my-gradebook'}).length,0);
+  const scoreButton=root.findAllByType('button').find(button=>button.children.includes('ดูคะแนนของฉัน →'));
+  assert.ok(scoreButton);
+  await click(scoreButton);
+  assert.equal(root.findByProps({'data-testid':'my-gradebook'}).props['data-user'],'user-1');
+  assert.equal(root.findByProps({'data-testid':'my-gradebook'}).props['data-course'],5);
+  await click(root.findAllByType('button').find(button=>button.children.includes('ปิดตารางคะแนน')));
+  assert.equal(root.findAllByProps({'data-testid':'my-gradebook'}).length,0);
   await act(async () => renderer.unmount());
+});
+
+test('students get a score button only for an approved course',async()=>{
+ studentCourses=[course,{id:6,code:'PENDING',title:'รออนุมัติ',term:'2/2569',status:'pending'}];
+ let renderer;
+ try{
+  renderer=await renderHome('student');
+  const buttons=renderer.root.findAllByType('button').filter(button=>button.children.includes('ดูคะแนนของฉัน →'));
+  assert.equal(buttons.length,1);
+  await click(buttons[0]);
+  assert.equal(renderer.root.findByProps({'data-testid':'my-gradebook'}).props['data-course'],5);
+ }finally{
+  studentCourses=[course];
+  if(renderer)await act(async()=>renderer.unmount());
+ }
 });
 
 test('teaching materials opens lazily and keeps unsaved work while switching tabs', async () => {
@@ -204,3 +229,4 @@ test('course members and pending requests use ascending student numbers regardle
     URL.revokeObjectURL=oldRevoke;
   }
 });
+
