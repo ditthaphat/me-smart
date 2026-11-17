@@ -1,15 +1,31 @@
--- Research-only accounts and project invitations. Existing accounts and project data are preserved.
-alter table public.profiles drop constraint profiles_role_check;
-alter table public.profiles add constraint profiles_role_check check (role in ('teacher','student','research_student'));
-create or replace function public.handle_new_user() returns trigger
-language plpgsql security definer set search_path = '' as $$
+-- Research-only student accounts use an additive flag. Existing roles and signup logic remain intact.
+alter table public.profiles add column research_only boolean not null default false;
+
+-- PostgreSQL runs triggers for the same event in name order: this runs after on_auth_user_created.
+create function private.mark_research_signup() returns trigger
+language plpgsql security definer set search_path='' as $$
 begin
-  insert into public.profiles(id,full_name,student_id,role)
-  values(new.id, coalesce(nullif(trim(new.raw_user_meta_data->>'full_name'),''),'ไม่ระบุชื่อ'),
-    nullif(trim(new.raw_user_meta_data->>'student_id'),''),
-    case when new.raw_user_meta_data->>'account_type' = 'research' then 'research_student' else 'student' end);
-  return new;
+ if new.raw_user_meta_data->>'account_type' = 'research' then
+  update public.profiles set research_only=true where id=new.id;
+  if not found then raise exception 'Student profile unavailable'; end if;
+ end if;
+ return new;
 end $$;
+revoke all on function private.mark_research_signup() from public,anon,authenticated;
+create trigger zz_research_account_created after insert on auth.users for each row execute function private.mark_research_signup();
+
+-- Research-only accounts must not acquire course enrollments through an API call.
+create function private.prevent_research_only_enrollment() returns trigger
+language plpgsql security definer set search_path='' as $$
+begin
+ if exists(select 1 from public.profiles p where p.id=new.student_id and p.research_only) then
+  raise exception 'Research-only accounts cannot enroll in courses';
+ end if;
+ return new;
+end $$;
+revoke all on function private.prevent_research_only_enrollment() from public,anon,authenticated;
+create trigger prevent_research_only_enrollment before insert or update of student_id,status on public.enrollments
+ for each row execute function private.prevent_research_only_enrollment();
 
 create table public.research_memberships (
   project_id bigint not null references public.research_projects(id) on delete cascade,
@@ -90,7 +106,7 @@ create or replace function public.request_research_membership(p_project_id bigin
 language plpgsql security definer set search_path='' as $$
 declare v_hash text; v_count integer; v_status text;
 begin
- if auth.uid() is null or not exists(select 1 from public.profiles where id=auth.uid() and role in ('student','research_student') and student_id is not null) then raise exception 'Student account required'; end if;
+ if auth.uid() is null or not exists(select 1 from public.profiles where id=auth.uid() and role='student' and student_id is not null) then raise exception 'Student account required'; end if;
  insert into private.research_join_attempts(user_id,started_at,attempts) values(auth.uid(),now(),1)
  on conflict(user_id) do update set
   attempts=case when private.research_join_attempts.started_at < now()-interval '15 minutes' then 1 else private.research_join_attempts.attempts+1 end,

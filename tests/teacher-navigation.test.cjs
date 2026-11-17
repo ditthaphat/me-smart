@@ -23,7 +23,7 @@ const course = { id: 5, code: '4112203', title: 'Fluid Mechanics', term: '2/2569
 function query(table) {
   const filters = {};
   const result = () => {
-    if (table === 'profiles') return { data: { id: 'user-1', full_name: 'ผู้ใช้ทดสอบ', student_id: role === 'teacher' ? null : '1', role }, error: null };
+    if (table === 'profiles') return { data: { id: 'user-1', full_name: 'ผู้ใช้ทดสอบ', student_id: role === 'teacher' ? null : '1', role: role === 'research_student' ? 'student' : role, research_only: role === 'research_student' }, error: null };
     if (table === 'courses') return { data: [course], error: null };
     if (table === 'enrollments') return { data: filters.status === 'pending' ? pendingRequests : students, error: null };
     return { data: [], error: null };

@@ -7,7 +7,7 @@ import styles from '../materials.module.css';
 import research from '../research.module.css';
 import dashboard from '../dashboard.module.css';
 
-type Profile = { id: string; full_name: string; student_id: string | null; role: 'teacher' | 'student' | 'research_student' };
+type Profile = { id: string; full_name: string; student_id: string | null; role: 'teacher' | 'student' };
 type Project = { project_id: number; title: string; project_stage: string; article_title: string; publication_target: string; article_due_date: string | null; membership_status: 'pending' | 'approved' | 'rejected' };
 type Task = { id: number; project_id: number; title: string; category: 'research'|'article'; assignee: string; start_date: string|null; due_date: string|null; progress: number; notes: string; external_url: string; assigned_to: string|null };
 type Report = { id: number; task_id: number; progress: number; note: string; external_url: string; status: 'pending'|'accepted'|'needs_changes'; feedback: string; created_at: string };

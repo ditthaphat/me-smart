@@ -18,7 +18,7 @@ import MaterialsPanel from './MaterialsPanel';
 import ResearchPanel from './ResearchPanel';
 import StudentMaterials from './StudentMaterials';
 
-type Profile = { id: string; full_name: string; student_id: string | null; role: 'teacher' | 'student' | 'research_student' };
+type Profile = { id: string; full_name: string; student_id: string | null; role: 'teacher' | 'student'; research_only: boolean };
 type Course = { id: number; code: string; title: string; term: string; status?: string };
 type Enrollment = { course_id: number; student_id: string; status: string; profiles: { full_name: string; student_id: string | null } | null };
 type Approved = { course_id: number; student_id: string };
@@ -97,10 +97,10 @@ export default function Home() {
         return;
       }
       const { data: p, error: profileError } = await db().from('profiles')
-        .select('id,full_name,student_id,role').eq('id', u.id).single();
+        .select('id,full_name,student_id,role,research_only').eq('id', u.id).single();
       if (profileError || !p) throw profileError ?? new Error('ไม่พบโปรไฟล์ผู้ใช้');
       const me = p as Profile;
-      if (me.role === 'research_student') { window.location.replace('/research'); return; }
+      if (me.role === 'student' && me.research_only) { window.location.replace('/research'); return; }
       setProfile(me);
       if (me.role === 'teacher') {
         const [courseResult, requestResult, approvedResult] = await Promise.all([

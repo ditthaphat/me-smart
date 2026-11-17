@@ -9,15 +9,21 @@ test('research-only account creation, invitation, approval, task privacy and pro
    create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
    create table auth.users(id uuid primary key,raw_user_meta_data jsonb not null default '{}'::jsonb);
    create table public.profiles(id uuid primary key references auth.users(id),full_name text,student_id text unique,role text not null constraint profiles_role_check check(role in ('teacher','student')));
-   create function public.handle_new_user() returns trigger language plpgsql security definer as $$begin return new;end$$;
+   create table public.enrollments(course_id bigint not null,student_id uuid not null references public.profiles(id),status text not null default 'pending');
+   create function public.handle_new_user() returns trigger language plpgsql security definer set search_path='' as $$begin insert into public.profiles(id,full_name,student_id,role) values(new.id,coalesce(nullif(trim(new.raw_user_meta_data->>'full_name'),''),'ไม่ระบุชื่อ'),nullif(trim(new.raw_user_meta_data->>'student_id'),''),'student'); return new;end$$;
    create trigger on_auth_user_created after insert on auth.users for each row execute function public.handle_new_user();
    grant select on public.profiles to authenticated;
    insert into auth.users(id) values('${teacher}'),('${otherTeacher}');
-   insert into public.profiles values('${teacher}','อาจารย์ ก',null,'teacher'),('${otherTeacher}','อาจารย์ ข',null,'teacher');`);
+   update public.profiles set role='teacher' where id in ('${teacher}','${otherTeacher}');`);
   await db.exec(fs.readFileSync(path.join(__dirname,'../docs/database/research-tracking.sql'),'utf8'));
   await db.exec(fs.readFileSync(path.join(__dirname,'../docs/database/research-student-access.sql'),'utf8'));
   await db.query('insert into auth.users(id,raw_user_meta_data) values($1,$2),($3,$4),($5,$6)',[student,JSON.stringify({full_name:'Student A',student_id:'S01',account_type:'research'}),peer,JSON.stringify({full_name:'Student B',student_id:'S02'}),outsider,JSON.stringify({full_name:'Student C',student_id:'S03',account_type:'teacher'})]);
-  assert.equal((await db.query('select role from profiles where id=$1',[student])).rows[0].role,'research_student');
+  assert.equal((await db.query('select role from profiles where id=$1',[student])).rows[0].role,'student');
+  assert.equal((await db.query('select research_only from profiles where id=$1',[student])).rows[0].research_only,true);
+  assert.equal((await db.query('select research_only from profiles where id=$1',[peer])).rows[0].research_only,false);
+  await assert.rejects(db.query("insert into public.enrollments(course_id,student_id) values(1,$1)",[student]),/Research-only accounts cannot enroll/);
+  await db.query("insert into public.enrollments(course_id,student_id) values(1,$1)",[peer]);
+  await assert.rejects(db.query("update public.enrollments set student_id=$1 where student_id=$2",[student,peer]),/Research-only accounts cannot enroll/);
   assert.equal((await db.query('select role from profiles where id=$1',[peer])).rows[0].role,'student');
   assert.equal((await db.query('select role from profiles where id=$1',[outsider])).rows[0].role,'student','signup metadata cannot make a teacher');
   async function as(id){await db.exec('reset role');await db.query("select set_config('request.jwt.claim.sub',$1,false)",[id]);await db.exec('set role authenticated')}
@@ -32,6 +38,7 @@ test('research-only account creation, invitation, approval, task privacy and pro
   const otherProject=(await db.query("insert into research_projects(title) values('โครงงานอีกอาจารย์') returning id")).rows[0].id;
   await db.query("insert into research_tasks(project_id,category,title,shared_with_students) values($1,'research','งานอีกกลุ่ม',true)",[otherProject]);
   await as(student);
+  await assert.rejects(db.query('update profiles set research_only=false where id=$1',[student]),/permission denied/);
   assert.equal((await db.query("select request_research_membership($1,'WrongCode_123') result",[p])).rows[0].result,'invalid');
   assert.equal((await db.query("select request_research_membership($1,'Research_123') result",[p])).rows[0].result,'pending');
   assert.equal((await db.query('select * from my_research_projects()')).rows[0].article_title,'');
