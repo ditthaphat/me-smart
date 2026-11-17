@@ -10,7 +10,7 @@ function query(table){let action='select',payload=null,filters=[];
   const data=matches.map(row=>({...row}));return {data:single?(data[0]??null):data,error:null};};
  const q={select(){return q;},eq(k,v){filters.push([k,v]);return q;},order(){return q;},insert(v){action='insert';payload=v;return q;},update(v){action='update';payload=v;return q;},delete(){action='delete';return q;},single(){return Promise.resolve(result(true));},then(resolve,reject){return Promise.resolve(result()).then(resolve,reject);}};return q;}
 const originalLoad=Module._load;
-Module._load=function(request,parent){if(parent&&parent.filename.endsWith(path.join('src','app','ResearchPanel.tsx'))){if(request==='../lib/supabase')return {db:()=>({from:query})};if(request.endsWith('.css'))return {__esModule:true,default:new Proxy({},{get:(_,key)=>String(key)})};}return originalLoad.apply(this,arguments);};
+Module._load=function(request,parent){if(parent&&parent.filename.endsWith(path.join('src','app','ResearchPanel.tsx'))){if(request==='./ResearchAccessPanel')return {__esModule:true,default:()=>null};if(request==='../lib/supabase')return {db:()=>({from:query})};if(request.endsWith('.css'))return {__esModule:true,default:new Proxy({},{get:(_,key)=>String(key)})};}return originalLoad.apply(this,arguments);};
 for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,filename);
 const ResearchPanel=require('../src/app/ResearchPanel.tsx').default;Module._load=originalLoad;
 const textOf=node=>node.children.flatMap(x=>typeof x==='string'?[x]:typeof x==='object'?textOf(x):[]).join('');
@@ -33,7 +33,7 @@ test('teacher creates a group, tracks weighted articles, edits, archives and del
  assert.equal(records.research_projects.length,1);assert.equal(records.research_projects[0].project_stage,'defended');
  assert.match(textOf(root.findByProps({'aria-label':'รายละเอียดโครงงาน'})),/ยังไม่มีงาน/);
  await click(button(root,'+ เพิ่มงาน'));form=root.findByProps({'aria-label':'เพิ่มงาน'});
- await change(field(form,'ชื่องาน *','input'),'บทนำ');await change(field(form,'ประเภทงาน','select'),'article');await change(field(form,'ผู้รับผิดชอบ','input'),'นักศึกษา ก');await change(field(form,'ความก้าวหน้า 0–100%','input'),'20');
+ await change(field(form,'ชื่องาน *','input'),'บทนำ');await change(field(form,'ประเภทงาน','select'),'article');await change(field(form,'ชื่อผู้รับผิดชอบที่แสดง','input'),'นักศึกษา ก');await change(field(form,'ความก้าวหน้า 0–100%','input'),'20');
  await submit(form);assert.equal(records.research_tasks.length,1);
  await click(button(root,'+ เพิ่มงาน'));form=root.findByProps({'aria-label':'เพิ่มงาน'});
  await change(field(form,'ชื่องาน *','input'),'ผลและวิจารณ์');await change(field(form,'ประเภทงาน','select'),'article');await change(field(form,'ความก้าวหน้า 0–100%','input'),'100');await change(field(form,'น้ำหนักงาน','input'),'3');await submit(form);

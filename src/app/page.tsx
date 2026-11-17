@@ -18,7 +18,7 @@ import MaterialsPanel from './MaterialsPanel';
 import ResearchPanel from './ResearchPanel';
 import StudentMaterials from './StudentMaterials';
 
-type Profile = { id: string; full_name: string; student_id: string | null; role: 'teacher' | 'student' };
+type Profile = { id: string; full_name: string; student_id: string | null; role: 'teacher' | 'student' | 'research_student' };
 type Course = { id: number; code: string; title: string; term: string; status?: string };
 type Enrollment = { course_id: number; student_id: string; status: string; profiles: { full_name: string; student_id: string | null } | null };
 type Approved = { course_id: number; student_id: string };
@@ -100,6 +100,7 @@ export default function Home() {
         .select('id,full_name,student_id,role').eq('id', u.id).single();
       if (profileError || !p) throw profileError ?? new Error('ไม่พบโปรไฟล์ผู้ใช้');
       const me = p as Profile;
+      if (me.role === 'research_student') { window.location.replace('/research'); return; }
       setProfile(me);
       if (me.role === 'teacher') {
         const [courseResult, requestResult, approvedResult] = await Promise.all([
@@ -306,6 +307,7 @@ export default function Home() {
             <label className={styles.field}>รหัสผ่าน<input required type="password" minLength={signup ? 6 : undefined} autoComplete={signup ? 'new-password' : 'current-password'} value={password} onChange={e => setPassword(e.target.value)} /></label>
             <div className={styles.actions}><button disabled={busy} type="submit" className={styles.primaryButton}>{busy ? 'กำลังดำเนินการ...' : signup ? 'สมัครบัญชี' : 'เข้าสู่ระบบ'}</button><button type="button" disabled={busy} className={styles.secondaryButton} onClick={() => { setSignup(!signup); setError(''); setMsg(''); }}>{signup ? 'มีบัญชีแล้ว' : 'สมัครบัญชีนักศึกษา'}</button></div>
           </form>
+          <p><a href="/research">เข้าสู่พื้นที่นักศึกษาโครงงานวิจัย →</a></p>
           <div className={styles.quickGuide}><strong>เริ่มใช้งานสำหรับนักศึกษา</strong><p>1. สมัครบัญชีและยืนยันอีเมล<br />2. เข้าร่วมรายวิชาและรออาจารย์อนุมัติ<br />3. สแกน QR เพื่อบันทึกการเข้าเรียน</p></div>
         </section>
         </div>

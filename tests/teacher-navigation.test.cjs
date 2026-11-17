@@ -23,7 +23,7 @@ const course = { id: 5, code: '4112203', title: 'Fluid Mechanics', term: '2/2569
 function query(table) {
   const filters = {};
   const result = () => {
-    if (table === 'profiles') return { data: { id: 'user-1', full_name: 'ผู้ใช้ทดสอบ', student_id: role === 'student' ? '1' : null, role }, error: null };
+    if (table === 'profiles') return { data: { id: 'user-1', full_name: 'ผู้ใช้ทดสอบ', student_id: role === 'teacher' ? null : '1', role }, error: null };
     if (table === 'courses') return { data: [course], error: null };
     if (table === 'enrollments') return { data: filters.status === 'pending' ? pendingRequests : students, error: null };
     return { data: [], error: null };
@@ -203,4 +203,11 @@ test('course members and pending requests use ascending student numbers regardle
     URL.createObjectURL=oldCreate;
     URL.revokeObjectURL=oldRevoke;
   }
+});
+
+
+test('research-only account is routed to its separate workspace before loading courses', async () => {
+  const oldWindow=global.window;let target='';global.window={location:{replace:value=>{target=value}}};
+  try { const renderer=await renderHome('research_student'); assert.equal(target,'/research'); assert.equal(renderer.root.findAllByProps({role:'tablist'}).length,0); await act(async()=>renderer.unmount()); }
+  finally { global.window=oldWindow; }
 });
