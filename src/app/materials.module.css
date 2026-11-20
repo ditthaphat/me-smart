@@ -16,6 +16,11 @@
 .empty{text-align:center;padding:24px 0;color:#7d90a0;font-size:14px}.error,.success{border-radius:10px;padding:12px 14px;font-size:13px}.error{background:#fff0f0;border:1px solid #edcccc;color:#972831}.success{background:#edf9f0;border:1px solid #c9ebd0;color:#1b6936}
 @media(max-width:700px){.header,.sectionTitle,.item{flex-direction:column}.card{padding:18px}.item>.actions{justify-content:flex-start;min-width:0}.formGrid,.filters{grid-template-columns:1fr}}
 .studentSection{margin-top:22px}
+.workspaceBar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 18px;padding:14px 18px;background:#f4f8fa;border:1px solid #d9e7ee;border-radius:14px}
+.workspaceBar>.field{flex:1 1 310px;margin:0}
+.workspaceTabs{display:flex;flex-wrap:wrap;gap:8px}
+.root .workspaceTabs button[aria-pressed="true"]{background:#175273;border-color:#175273;color:#fff}
+@media(max-width:700px){.workspaceTabs{width:100%}.workspaceTabs button{flex:1 1 200px}}
 .statGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
 .statGrid>div{padding:14px;border:1px solid #d8e6ee;border-radius:12px;background:#f3f8fa}.statGrid strong{display:block;font-size:23px;color:#174c6b}.statGrid span{display:block;margin-top:4px;font-size:13px;color:#547085}
 .reportTable{overflow-x:auto;margin-top:18px}.reportTable table{width:100%;border-collapse:collapse;font-size:13px}.reportTable th,.reportTable td{text-align:left;padding:11px 9px;border-bottom:1px solid #dbe8ef;white-space:nowrap}.reportTable th{background:#edf4f8;color:#174c6b}

@@ -9,7 +9,7 @@ const { create, act } = require('react-test-renderer');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const records = {
-  courses: [{ id: 5, teacher_id: 'teacher-1', code: '4112203', title: 'Fluid Mechanics', term: '2/2569' }, { id: 6, teacher_id: 'other', code: '4111307', title: 'CAE', term: '2/2569' }],
+  courses: [{ id: 5, teacher_id: 'teacher-1', code: '4112203', title: 'Fluid Mechanics', term: '2/2569' }, { id: 7, teacher_id: 'teacher-1', code: '4111307', title: 'CAE', term: '2/2569' }, { id: 6, teacher_id: 'other', code: 'OTHER', title: 'Other', term: '2/2569' }],
   teaching_materials: [],
   advising_sessions: [{ id: 44, discussion: 'ตัวอย่าง' }],
 };
@@ -17,7 +17,7 @@ let serial = 0;
 function query(table) {
   let action = 'select', payload = null, filters = [], range = null;
   const result = (single = false) => {
-    let matches = records[table].filter(row=>filters.every(([key,value])=>value && typeof value==='object' && 'term' in value ? String(row[key]).toLowerCase().includes(value.term) : row[key]===value));
+    let matches = records[table].filter(row=>filters.every(([key,value])=>value && typeof value==='object' && 'term' in value ? String(row[key]).toLowerCase().includes(value.term) : value && typeof value==='object' && 'not' in value ? row[key]!==value.not : row[key]===value));
     if (action === 'insert') { const row={id:++serial,is_archived:false,created_at:'2026-11-15T00:00:00Z',...payload}; records[table].push(row); matches=[row]; }
     if (action === 'update') matches.forEach(row=>Object.assign(row,payload));
     if (action === 'delete') records[table]=records[table].filter(row=>!matches.includes(row));
@@ -27,7 +27,7 @@ function query(table) {
     return {data:single?(data[0]??null):data,count,error:null};
   };
   const q = {
-    select(){return q;},eq(k,v){filters.push([k,v]);return q;},order(){return q;},
+    select(){return q;},eq(k,v){filters.push([k,v]);return q;},neq(k,v){filters.push([k,{not:v}]);return q;},is(k,v){filters.push([k,v]);return q;},order(){return q;},
     ilike(k,v){const term=v.slice(1,-1).replace(/\\([\\%_])/g,'$1').toLowerCase();filters.push([k,{term}]);return q;},
     range(a,b){range=[a,b];return q;},insert(v){action='insert';payload=v;return q;},
     update(v){action='update';payload=v;return q;},delete(){action='delete';return q;},
@@ -54,12 +54,15 @@ const button=(root,label)=>root.findAllByType('button').find(node=>textOf(node)=
 const inputIn=(form,label,type)=>form.findAllByType('label').find(node=>node.children.some(c=>typeof c==='string'&&c===label)).findByType(type);
 const change=async(node,value)=>act(async()=>{node.props.onChange({target:{value}});});
 const submit=async(form)=>act(async()=>{await form.props.onSubmit({preventDefault(){}});});
+const chooseCourse=async(root,value)=>change(inputIn(root,'รายวิชาที่จัดการ','select'),value);
 
 test('teacher manages an external teaching document without uploading or losing other data',async()=>{
   let renderer; await act(async()=>{renderer=create(React.createElement(MaterialsPanel,{teacherId:'teacher-1',active:true}));});
   let root=renderer.root;
   assert.match(textOf(root.findByProps({'aria-label':'เอกสารการสอน'})),/เฉพาะอาจารย์เจ้าของข้อมูล/);
-  await act(async()=>{button(root,'+ เพิ่มเอกสาร').props.onClick();});
+  await chooseCourse(root,'5');
+  await act(async()=>{button(root,'งานแต่งตำรา / หนังสือ').props.onClick();});
+  await act(async()=>{button(root,'+ เพิ่มตำรา').props.onClick();});
   let form=root.findByProps({'aria-label':'เพิ่มเอกสาร'});
   await change(inputIn(form,'ชื่อเอกสาร *','input'),'ตำรากลศาสตร์ของไหล');
   await change(inputIn(form,'รายวิชา','select'),'5');
@@ -87,6 +90,8 @@ test('teacher manages an external teaching document without uploading or losing 
   await act(async()=>renderer.unmount());
   await act(async()=>{renderer=create(React.createElement(MaterialsPanel,{teacherId:'teacher-1',active:true}));});
   root=renderer.root;
+  await chooseCourse(root,'5');
+  await act(async()=>{button(root,'งานแต่งตำรา / หนังสือ').props.onClick();});
   assert.match(textOf(root.findByProps({'aria-label':'เอกสารการสอน'})),/เวอร์ชัน 2.0/);
   await act(async()=>{await button(root,'เก็บถาวร').props.onClick();});
   assert.equal(records.teaching_materials[0].is_archived,true);
@@ -100,7 +105,7 @@ test('teacher manages an external teaching document without uploading or losing 
   await change(form.findByProps({'aria-label':'คำยืนยันลบเอกสาร'}),'ลบ');
   assert.equal(button(form,'ลบรายการนี้ถาวร').props.disabled,false);
   await submit(form); assert.equal(records.teaching_materials.length,0);
-  assert.equal(records.courses.length,2); assert.equal(records.advising_sessions.length,1);
+  assert.equal(records.courses.length,3); assert.equal(records.advising_sessions.length,1);
   await act(async()=>renderer.unmount());
 });
 
@@ -109,6 +114,7 @@ test('teacher can page and filter their document list',async()=>{
   records.teaching_materials.push({id:999,owner_id:'other',course_id:6,title:'ของผู้อื่น',material_type:'lesson',material_status:'ready',version_label:'',external_url:'',notes:'',is_archived:false,created_at:'2026-11-15T00:00:00Z'});
   let renderer; await act(async()=>{renderer=create(React.createElement(MaterialsPanel,{teacherId:'teacher-1',active:true}));});
   const root=renderer.root;
+  await chooseCourse(root,'5');
   assert.equal(root.findAllByType('article').length,10);
   await act(async()=>{button(root,'ถัดไป').props.onClick();});
   assert.equal(root.findAllByType('article').length,2);
@@ -125,4 +131,39 @@ test('teacher can page and filter their document list',async()=>{
   assert.equal(root.findByProps({placeholder:'ค้นหาชื่อเอกสาร'}).props.value,'');
   assert.equal(records.teaching_materials.filter(row=>row.owner_id==='teacher-1').length,13);
   await act(async()=>renderer.unmount());
+});
+
+test('teacher separates teaching files and textbooks for each course, including unassigned records',async()=>{
+  const make=(id,course_id,title,material_type)=>({id,owner_id:'teacher-1',course_id,title,material_type,material_status:'draft',version_label:'',external_url:'',notes:'',is_archived:false,created_at:'2026-11-15T00:00:00Z'});
+  records.teaching_materials=[make(201,5,'สไลด์ของไหล','slides'),make(202,5,'ตำราของไหล','textbook'),make(203,7,'สไลด์ CAE','slides'),make(204,7,'ตำรา CAE','textbook'),make(205,null,'ตำรายังไม่ระบุวิชา','textbook')];
+  const oldWindow=global.window; global.window={confirm:()=>false};
+  let renderer;
+  try{
+    await act(async()=>{renderer=create(React.createElement(MaterialsPanel,{teacherId:'teacher-1',active:true}));});
+    const root=renderer.root;
+    assert.equal(root.findAllByType('article').length,0,'no mixed list before selecting a course');
+    await chooseCourse(root,'5');
+    assert.match(textOf(root),/สไลด์ของไหล/);
+    assert.doesNotMatch(textOf(root),/ตำราของไหล|สไลด์ CAE|ตำรา CAE/);
+    await act(async()=>{button(root,'งานแต่งตำรา / หนังสือ').props.onClick();});
+    assert.match(textOf(root),/ตำราของไหล/);
+    assert.doesNotMatch(textOf(root),/สไลด์ของไหล|สไลด์ CAE|ตำรา CAE/);
+    await act(async()=>{button(root,'+ เพิ่มตำรา').props.onClick();});
+    const form=root.findByProps({'aria-label':'เพิ่มเอกสาร'});
+    assert.equal(inputIn(form,'รายวิชา','select').props.value,'5');
+    assert.equal(inputIn(form,'ประเภทเอกสาร','select').props.value,'textbook');
+    await change(inputIn(form,'ชื่อเอกสาร *','input'),'ฉบับร่างที่ยังไม่บันทึก');
+    await chooseCourse(root,'7');
+    assert.equal(inputIn(form,'ชื่อเอกสาร *','input').props.value,'ฉบับร่างที่ยังไม่บันทึก','canceling a course switch keeps the draft');
+    await act(async()=>{button(form,'ยกเลิก').props.onClick();});
+    assert.ok(root.findAllByProps({'aria-label':'เพิ่มเอกสาร'}).length,'canceling discard keeps the form');
+    global.window.confirm=()=>true;
+    await act(async()=>{button(form,'ยกเลิก').props.onClick();});
+    await chooseCourse(root,'7');
+    assert.match(textOf(root),/ตำรา CAE/);
+    assert.doesNotMatch(textOf(root),/ตำราของไหล|สไลด์ CAE/);
+    await chooseCourse(root,'unassigned');
+    assert.match(textOf(root),/ตำรายังไม่ระบุวิชา/,'unassigned legacy records remain available');
+    assert.equal(records.teaching_materials.length,5,'switching views never changes data');
+  }finally{if(renderer)await act(async()=>renderer.unmount());global.window=oldWindow;}
 });

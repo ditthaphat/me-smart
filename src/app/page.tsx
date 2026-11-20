@@ -55,6 +55,8 @@ export default function Home() {
   const [materialsVisited, setMaterialsVisited] = useState(false);
   const [researchVisited, setResearchVisited] = useState(false);
   const [workspaceTab,setWorkspaceTab]=useState('attendance');
+  const [courseMaterialsVisited,setCourseMaterialsVisited]=useState(false);
+  const [courseMaterialsDirty,setCourseMaterialsDirty]=useState(false);
   const [memberPage,setMemberPage]=useState(0);
   const [user, setUser] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -82,6 +84,7 @@ export default function Home() {
   const [courseId, setCourseId] = useState('');
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [studentGradeCourseId,setStudentGradeCourseId]=useState<number|null>(null);
+  const [studentMaterialCourseId,setStudentMaterialCourseId]=useState<number|null>(null);
   const [members, setMembers] = useState<CourseMember[]>([]);
   const [memberSearch, setMemberSearch] = useState('');
   const [membersLoading, setMembersLoading] = useState(false);
@@ -95,7 +98,7 @@ export default function Home() {
       setError('');
       setUser(u?.id ?? null);
       if (!u) {
-        setProfile(null); setCourses([]); setRequests([]); setApproved([]); setSelectedCourseId(null); setStudentGradeCourseId(null); setMembers([]);
+        setProfile(null); setCourses([]); setRequests([]); setApproved([]); setSelectedCourseId(null); setStudentGradeCourseId(null); setStudentMaterialCourseId(null); setCourseMaterialsDirty(false); setCourseMaterialsVisited(false); setMembers([]);
         return;
       }
       const { data: p, error: profileError } = await db().from('profiles')
@@ -142,6 +145,11 @@ export default function Home() {
   const openCourse = async (id: number) => {
     if(classroomLocked){setError('กรุณาปิดรับ QR และบันทึกหรือยกเลิกการแก้ไขก่อนเปลี่ยนรายวิชา');return;}
     if (profile?.role !== 'teacher') return;
+    if (selectedCourseId !== id) {
+      if (courseMaterialsDirty && !window.confirm('มีข้อมูลเอกสารที่ยังไม่ได้บันทึก ต้องการทิ้งการแก้ไขและเปลี่ยนรายวิชาหรือไม่?')) return;
+      setCourseMaterialsDirty(false);
+      setCourseMaterialsVisited(workspaceTab === 'course-materials');
+    }
     setSelectedCourseId(id); setMemberSearch(''); setMemberStatus('all'); setSelectedStudentId(null); setMembersLoading(true); setError('');
     try {
       const { data, error: e } = await db().from('enrollments')
@@ -172,7 +180,9 @@ export default function Home() {
       setError('กรุณาปิดรับ QR และบันทึกหรือยกเลิกการแก้ไขก่อนปิดรายละเอียดรายวิชา');
       return;
     }
+    if (courseMaterialsDirty && !window.confirm('มีข้อมูลเอกสารที่ยังไม่ได้บันทึก ต้องการทิ้งการแก้ไขและปิดรายวิชาหรือไม่?')) return;
     setSelectedCourseId(null);
+    setCourseMaterialsDirty(false); setCourseMaterialsVisited(false);
     setMembers([]);
   }
 
@@ -233,10 +243,11 @@ export default function Home() {
   }
   async function signOut() {
     if(classroomLocked){setError('กรุณาปิดรับ QR และบันทึกหรือยกเลิกการแก้ไขก่อนออกจากระบบ');return;}
+    if(courseMaterialsDirty && !window.confirm('มีข้อมูลเอกสารหรือบทที่ยังไม่ได้บันทึก ต้องการทิ้งการแก้ไขและออกจากระบบหรือไม่?'))return;
     await run(async () => {
       const { error: e } = await db().auth.signOut();
       if (e) throw e;
-      setUser(null); setProfile(null); setCourses([]); setRequests([]); setApproved([]); setSelectedCourseId(null); setStudentGradeCourseId(null); setMembers([]);
+      setUser(null); setProfile(null); setCourses([]); setRequests([]); setApproved([]); setSelectedCourseId(null); setStudentGradeCourseId(null); setStudentMaterialCourseId(null); setCourseMaterialsDirty(false); setCourseMaterialsVisited(false); setMembers([]);
       setTeacherTab('overview'); setWorkspaceTab('attendance'); setAdvisingVisited(false);
     });
   }
@@ -266,6 +277,8 @@ export default function Home() {
   const selectedCourse = courses.find(c => c.id === selectedCourseId);
   const studentGradeCourse = profile?.role==='student'
     ? courses.find(c=>c.id===studentGradeCourseId&&c.status==='approved') : undefined;
+  const studentMaterialCourse = profile?.role==='student'
+    ? courses.find(c=>c.id===studentMaterialCourseId&&c.status==='approved') : undefined;
   const filteredMembers = members.filter(m => {
     const q = memberSearch.trim().toLocaleLowerCase();
     return (memberStatus === 'all' || m.status === memberStatus) && (!q || [m.profiles?.full_name, m.profiles?.student_id, m.student_id].some(v => (v ?? '').toLocaleLowerCase().includes(q)));
@@ -425,14 +438,17 @@ export default function Home() {
             <div className={styles.courseTileTop}><span className={styles.pill}>Course ID: {c.id}</span>{c.status && <span className={styles.pill}>{statusText(c.status)}</span>}</div>
             <h3>{c.code} — {c.title}</h3><p className={styles.muted}>ภาคเรียน {c.term}</p>
             {profile.role === 'teacher' && <button type="button" className={styles.secondaryButton} disabled={membersLoading} onClick={() => void openCourse(c.id)}>จัดการรายวิชา →</button>}
-            {profile.role === 'student' && c.status === 'approved' && <button type="button" className={styles.secondaryButton} aria-expanded={studentGradeCourseId===c.id} aria-controls={studentGradeCourseId===c.id?'student-gradebook':undefined} onClick={()=>setStudentGradeCourseId(current=>current===c.id?null:c.id)}>{studentGradeCourseId===c.id?'ปิดตารางคะแนน':'ดูคะแนนของฉัน →'}</button>}
+            {profile.role === 'student' && c.status === 'approved' && <div className={styles.actions}>
+              <button type="button" className={styles.secondaryButton} aria-expanded={studentGradeCourseId===c.id} aria-controls={studentGradeCourseId===c.id?'student-gradebook':undefined} onClick={()=>{setStudentMaterialCourseId(null);setStudentGradeCourseId(current=>current===c.id?null:c.id);}}>{studentGradeCourseId===c.id?'ปิดตารางคะแนน':'ดูคะแนนของฉัน →'}</button>
+              <button type="button" className={styles.secondaryButton} aria-expanded={studentMaterialCourseId===c.id} aria-controls={studentMaterialCourseId===c.id?'student-materials':undefined} onClick={()=>{setStudentGradeCourseId(null);setStudentMaterialCourseId(current=>current===c.id?null:c.id);}}>{studentMaterialCourseId===c.id?'ปิดเอกสาร':'เอกสารรายวิชานี้ →'}</button>
+            </div>}
           </article>)}</div>}
         </section>
         {profile.role === 'student' && studentGradeCourse && <div id="student-gradebook"><StudentGradebook key={`${profile.id}-${studentGradeCourse.id}`} userId={profile.id} course={studentGradeCourse}/></div>}
-        {profile.role === 'student' && <StudentMaterials courses={courses.filter(c => c.status === 'approved')} />}
+        {profile.role === 'student' && studentMaterialCourse && <div id="student-materials"><StudentMaterials key={studentMaterialCourse.id} course={studentMaterialCourse} /></div>}
         {profile.role === 'teacher' && selectedCourse && <section className={`${styles.card} ${styles.coursesSection}`} id="course-management">
           <div className={styles.sectionHeading}><div><p className={styles.eyebrow}>COURSE MANAGEMENT</p><h2>{selectedCourse.code} — {selectedCourse.title}</h2><p className={styles.muted}>Course ID: {selectedCourse.id} · ภาคเรียน {selectedCourse.term}</p></div><button type="button" className={styles.secondaryButton} onClick={closeCourse}>ปิดรายละเอียด</button></div>
-          <nav className={compact.tabs} aria-label="งานในรายวิชา">{[['attendance','เช็คชื่อ / คาบเรียน'],['members','นักศึกษา'],['leave','คำขอลา'],['security','เหตุการณ์เช็คชื่อ'],['reports','รายงาน'],['gradebook','ตารางคะแนน']].map(([id,label])=><button key={id} type="button" aria-pressed={workspaceTab===id} onClick={()=>setWorkspaceTab(id)}>{label}</button>)}</nav>
+          <nav className={compact.tabs} aria-label="งานในรายวิชา">{[['attendance','เช็คชื่อ / คาบเรียน'],['members','นักศึกษา'],['leave','คำขอลา'],['security','เหตุการณ์เช็คชื่อ'],['reports','รายงาน'],['gradebook','ตารางคะแนน'],['course-materials','เอกสาร / ตำรา']].map(([id,label])=><button key={id} type="button" aria-pressed={workspaceTab===id} onClick={()=>{if(id==='course-materials')setCourseMaterialsVisited(true);setWorkspaceTab(id);}}>{label}</button>)}</nav>
           <div hidden={workspaceTab!=='members'}>
           <div className={styles.miniStats}><div><strong>{members.filter(m => m.status === 'approved').length}</strong><span>อนุมัติแล้ว</span></div><div><strong>{members.filter(m => m.status === 'pending').length}</strong><span>รออนุมัติ</span></div><div><strong>{members.filter(m => m.status === 'rejected').length}</strong><span>ไม่อนุมัติ</span></div></div>
           <div className={styles.studentTools}>
@@ -454,6 +470,7 @@ export default function Home() {
           </div><div hidden={workspaceTab!=='security'}><AttendanceSecurity key={`security-${selectedCourse.id}`} courseId={selectedCourse.id} refreshVersion={sessionChange.courseId===selectedCourse.id?sessionChange.version:0} preferredSessionId={sessionChange.courseId===selectedCourse.id?sessionChange.sessionId:undefined} />
           </div><div hidden={workspaceTab!=='reports'}><AttendanceAnalytics key={`analytics-${selectedCourse.id}`} courseId={selectedCourse.id} courseCode={selectedCourse.code} /></div>
           {workspaceTab==='gradebook'&&<GradebookPanel key={`gradebook-${selectedCourse.id}`} courseId={selectedCourse.id} courseCode={selectedCourse.code} refreshVersion={sessionChange.courseId===selectedCourse.id?sessionChange.version:0}/>}
+          {courseMaterialsVisited && <div hidden={workspaceTab!=='course-materials'}><MaterialsPanel key={`course-materials-${selectedCourse.id}`} teacherId={profile.id} active={teacherTab==='courses' && workspaceTab==='course-materials'} initialCourseId={selectedCourse.id} lockedCourse onDirtyChange={setCourseMaterialsDirty}/></div>}
         </section>}
         </div>
       </>}

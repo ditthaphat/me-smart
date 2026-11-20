@@ -50,19 +50,24 @@ const click=async(node)=>act(async()=>{await node.props.onClick();});
 const submit=async(node)=>act(async()=>{await node.props.onSubmit({preventDefault(){}});});
 
 test('the author tracks incomplete topics, deadlines and progress without changing other records',async()=>{
- let renderer;await act(async()=>{renderer=create(React.createElement(ChapterProgressPanel,{teacherId:'teacher-1',materialId:9,materialTitle:'ตำราทดสอบ',active:true,onBack(){}}));});
+ const dirtyStates=[];const onDirtyChange=value=>dirtyStates.push(value);
+ let renderer;await act(async()=>{renderer=create(React.createElement(ChapterProgressPanel,{teacherId:'teacher-1',materialId:9,materialTitle:'ตำราทดสอบ',active:true,onBack(){},onDirtyChange}));});
  let root=renderer.root;
  assert.match(textOf(root.findByProps({'aria-label':'ติดตามความก้าวหน้ารายบท'})),/ยังคำนวณไม่ได้/);
  await click(button(root,'+ เพิ่มบท'));
  let form=root.findByProps({'aria-label':'เพิ่มบท'});
  await change(field(form,'ชื่อบท *','input'),'บทนำ');
+ assert.equal(dirtyStates.at(-1),true);
  await change(field(form,'วันเป้าหมายแล้วเสร็จ','input'),'2020-01-01');
  await submit(form);
+ assert.equal(dirtyStates.at(-1),false);
  assert.equal(records.material_chapters.length,1);
  assert.match(textOf(root.findByProps({'aria-label':'ติดตามความก้าวหน้ารายบท'})),/ยังไม่กำหนดหัวข้อ/);
  const topicArea=root.findByProps({placeholder:'เช่น 1.1 บทนำ\n1.2 ความเป็นมา'});
  await change(topicArea,'หัวข้อ ก\nหัวข้อ ข\nหัวข้อ ค');
+ assert.equal(dirtyStates.at(-1),true);
  await submit(topicArea.parent.parent);
+ assert.equal(dirtyStates.at(-1),false);
  assert.equal(records.material_topics.length,3);
  assert.match(textOf(root.findByProps({'aria-label':'ติดตามความก้าวหน้ารายบท'})),/เลยกำหนด/);
  await change(root.findByProps({'aria-label':'สถานะ หัวข้อ ก'}),'done');

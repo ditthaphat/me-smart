@@ -10,6 +10,7 @@ import styles from './materials.module.css';
 type Course = { id: number; code: string; title: string; term: string };
 type MaterialType = 'textbook' | 'lesson' | 'slides' | 'exercise' | 'teaching_plan' | 'other';
 type MaterialStatus = 'draft' | 'review' | 'ready';
+type Workspace = 'materials' | 'textbooks';
 type Material = {
   id: number; course_id: number | null; title: string; material_type: MaterialType;
   material_status: MaterialStatus; version_label: string; external_url: string;
@@ -45,14 +46,17 @@ function errorText(value: unknown): string {
   return error?.message || (value instanceof Error ? value.message : 'เกิดข้อผิดพลาด กรุณาลองอีกครั้ง');
 }
 
-export default function MaterialsPanel({ teacherId, active }: { teacherId: string; active: boolean }) {
+export default function MaterialsPanel({ teacherId, active, initialCourseId, lockedCourse = false, onDirtyChange }: {
+  teacherId: string; active: boolean; initialCourseId?: number; lockedCourse?: boolean; onDirtyChange?: (dirty: boolean) => void;
+}) {
   const [courses, setCourses] = useState<Course[]>([]);
   const [items, setItems] = useState<Material[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [courseFilter, setCourseFilter] = useState('');
+  const [courseFilter, setCourseFilter] = useState(initialCourseId ? String(initialCourseId) : '');
+  const [workspace, setWorkspace] = useState<Workspace>('materials');
   const [typeFilter, setTypeFilter] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -69,11 +73,15 @@ export default function MaterialsPanel({ teacherId, active }: { teacherId: strin
   const [deletePreview, setDeletePreview] = useState<Material | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [tracking, setTracking] = useState<Material | null>(null);
+  const [chapterDirty, setChapterDirty] = useState(false);
   const [sharing, setSharing] = useState<Material | null>(null);
   const deleteHeading = useRef<HTMLHeadingElement | null>(null);
   const titleInput = useRef<HTMLInputElement | null>(null);
   const dirty = formOpen && JSON.stringify(form) !== JSON.stringify(savedForm);
   const coursesById = useMemo(() => new Map(courses.map(course => [course.id, course])), [courses]);
+  const workspaceTypes = types.filter(option => workspace === 'textbooks' ? option.value === 'textbook' : option.value !== 'textbook');
+
+  useEffect(() => { onDirtyChange?.(dirty || chapterDirty); }, [dirty, chapterDirty, onDirtyChange]);
 
   useEffect(() => {
     const timer = setTimeout(() => setSearchTerm(search.trim()), 250);
@@ -96,12 +104,17 @@ export default function MaterialsPanel({ teacherId, active }: { teacherId: strin
   useEffect(() => {
     if (!active) return;
     let current = true;
+    if (!courseFilter) {
+      setItems([]); setTotal(0); setLoading(false); setItemsError('');
+      return () => { current = false; };
+    }
     setLoading(true);
     void (async () => {
       try {
         let query = db().from('teaching_materials').select('id,course_id,title,material_type,material_status,version_label,external_url,notes,is_archived,created_at', { count: 'exact' }).eq('owner_id', teacherId);
         if (!showArchived) query = query.eq('is_archived', false);
-        if (courseFilter) query = query.eq('course_id', Number(courseFilter));
+        query = courseFilter === 'unassigned' ? query.is('course_id', null) : query.eq('course_id', Number(courseFilter));
+        query = workspace === 'textbooks' ? query.eq('material_type', 'textbook') : query.neq('material_type', 'textbook');
         if (typeFilter) query = query.eq('material_type', typeFilter);
         if (searchTerm) query = query.ilike('title', `%${searchTerm.replace(/([\\%_])/g, '\\$1')}%`);
         const { data, error: e, count } = await query.order('created_at', { ascending: false }).order('id', { ascending: false }).range(page * 10, page * 10 + 9);
@@ -114,16 +127,31 @@ export default function MaterialsPanel({ teacherId, active }: { teacherId: strin
       finally { if (current) setLoading(false); }
     })();
     return () => { current = false; };
-  }, [active, teacherId, page, searchTerm, courseFilter, typeFilter, showArchived, refresh]);
+  }, [active, teacherId, page, searchTerm, courseFilter, workspace, typeFilter, showArchived, refresh]);
 
   useEffect(() => { if (deletePreview) deleteHeading.current?.focus(); }, [deletePreview]);
 
   function allowDiscard() {
     return !dirty || window.confirm('มีข้อมูลเอกสารที่ยังไม่ได้บันทึก ต้องการทิ้งการแก้ไขหรือไม่?');
   }
+  function resetExplorer() {
+    setFormOpen(false); setEditing(null); setForm(emptyForm()); setSavedForm(emptyForm());
+    setDeletePreview(null); setDeleteConfirmation(''); setError(''); setMessage('');
+    setSearch(''); setSearchTerm(''); setTypeFilter(''); setShowArchived(false);
+    setItems([]); setTotal(0); setPage(0);
+  }
+  function changeCourse(value: string) {
+    if (value === courseFilter || !allowDiscard()) return;
+    resetExplorer(); setCourseFilter(value);
+  }
+  function changeWorkspace(value: Workspace) {
+    if (value === workspace || !allowDiscard()) return;
+    resetExplorer(); setWorkspace(value);
+  }
   function openNew() {
-    if (!allowDiscard()) return;
-    const next = emptyForm(); setEditing(null); setForm(next); setSavedForm(next); setFormOpen(true); setDeletePreview(null); setDeleteConfirmation(''); setError(''); setMessage('');
+    if (!courseFilter || !allowDiscard()) return;
+    const next: Form = { ...emptyForm(), courseId: courseFilter === 'unassigned' ? '' : courseFilter, materialType: workspace === 'textbooks' ? 'textbook' : 'lesson' };
+    setEditing(null); setForm(next); setSavedForm(next); setFormOpen(true); setDeletePreview(null); setDeleteConfirmation(''); setError(''); setMessage('');
   }
   function openEdit(item: Material) {
     if (!allowDiscard()) return;
@@ -156,9 +184,10 @@ export default function MaterialsPanel({ teacherId, active }: { teacherId: strin
       const { data, error: e } = await query.select('id').single();
       if (e) throw e; if (!data?.id) throw new Error('ไม่สามารถยืนยันการบันทึก กรุณาลองอีกครั้ง');
       setFormOpen(false); setEditing(null); setForm(emptyForm()); setSavedForm(emptyForm());
-      if (!editing) { setPage(0); setSearch(''); setSearchTerm(''); setCourseFilter(''); setTypeFilter(''); setShowArchived(false); }
+      if (!editing) { setPage(0); setSearch(''); setSearchTerm(''); setTypeFilter(''); setShowArchived(false); }
       setRefresh(v => v + 1);
-      setMessage(editing ? 'แก้ไขรายการเอกสารแล้ว' : 'เพิ่มรายการเอกสารแล้ว');
+      const moved = editing && (editing.course_id !== courseId || editing.material_type !== form.materialType);
+      setMessage(moved ? 'บันทึกแล้ว หากเปลี่ยนรายวิชาหรือประเภท รายการอาจย้ายไปอีกส่วนและต้องเผยแพร่ใหม่' : editing ? 'แก้ไขรายการเอกสารแล้ว' : 'เพิ่มรายการเอกสารแล้ว');
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
   }
   async function archive(item: Material) {
@@ -184,22 +213,36 @@ export default function MaterialsPanel({ teacherId, active }: { teacherId: strin
   }
 
   return <section className={styles.root} aria-label="เอกสารการสอน">
-    {tracking ? <ChapterProgressPanel key={tracking.id} teacherId={teacherId} materialId={tracking.id} materialTitle={tracking.title} active={active} onBack={() => setTracking(null)} /> : sharing ? <MaterialPublicationPanel key={sharing.id} teacherId={teacherId} source={sharing} courseName={sharing.course_id === null ? 'ยังไม่ระบุรายวิชา' : (coursesById.get(sharing.course_id) ? `${coursesById.get(sharing.course_id)?.code} · ${coursesById.get(sharing.course_id)?.title} · ${coursesById.get(sharing.course_id)?.term}` : 'ไม่พบรายวิชา')} onBack={() => { setSharing(null); setRefresh(v => v + 1); }} /> : <>
-    <div className={styles.header}><div><p className={styles.eyebrow}>TEACHING MATERIALS</p><h2>เอกสารการสอนและตำรา</h2><p>จัดรายการตำรา บทเรียน และสื่อการสอนแยกตามรายวิชา</p></div><span className={styles.badge}>เฉพาะอาจารย์เจ้าของข้อมูล</span></div>
+    {tracking ? <ChapterProgressPanel key={tracking.id} teacherId={teacherId} materialId={tracking.id} materialTitle={tracking.title} active={active} onDirtyChange={setChapterDirty} onBack={() => { setTracking(null); setChapterDirty(false); }} /> : sharing ? <MaterialPublicationPanel key={sharing.id} teacherId={teacherId} source={sharing} courseName={sharing.course_id === null ? 'ยังไม่ระบุรายวิชา' : (coursesById.get(sharing.course_id) ? `${coursesById.get(sharing.course_id)?.code} · ${coursesById.get(sharing.course_id)?.title} · ${coursesById.get(sharing.course_id)?.term}` : 'ไม่พบรายวิชา')} onBack={() => { setSharing(null); setRefresh(v => v + 1); }} /> : <>
+    <div className={styles.header}><div><p className={styles.eyebrow}>TEACHING MATERIALS</p><h2>เอกสารรายวิชาและงานแต่งตำรา</h2><p>เลือกรายวิชา แล้วจัดการเอกสารหรือความก้าวหน้าของตำราแยกกัน</p></div><span className={styles.badge}>เฉพาะอาจารย์เจ้าของข้อมูล</span></div>
     <p className={styles.note}>ระบบเก็บรายละเอียดและลิงก์ ไม่ได้อัปโหลดไฟล์ การเปิดไฟล์ขึ้นอยู่กับสิทธิ์ที่กำหนดไว้ในแหล่งเก็บไฟล์</p>
     {(error || coursesError || itemsError) && <p role="alert" className={styles.error}>{error || coursesError || itemsError}</p>}{message && <p role="status" className={styles.success}>{message}</p>}
-    <div className={styles.card}>
-      <div className={styles.sectionTitle}><div><h3>รายการเอกสาร</h3><p>เวอร์ชันระบุเอง หากต้องการเก็บหลายเวอร์ชันให้เพิ่มเป็นรายการแยก</p></div><button type="button" className={styles.primary} disabled={busy} onClick={openNew}>+ เพิ่มเอกสาร</button></div>
+    <div className={styles.workspaceBar}>
+      <label className={styles.field}>รายวิชาที่จัดการ
+        <select value={courseFilter} disabled={lockedCourse || busy} onChange={e => changeCourse(e.target.value)}>
+          <option value="">เลือกรายวิชา</option>
+          {!lockedCourse && <option value="unassigned">รายการที่ยังไม่ระบุรายวิชา</option>}
+          {courses.map(course => <option key={course.id} value={course.id}>{course.code} · {course.title} · {course.term}</option>)}
+        </select>
+      </label>
+      <div className={styles.workspaceTabs} aria-label="ส่วนงานเอกสาร">
+        <button type="button" aria-pressed={workspace === 'materials'} disabled={busy} onClick={() => changeWorkspace('materials')}>เอกสารประกอบการสอน</button>
+        <button type="button" aria-pressed={workspace === 'textbooks'} disabled={busy} onClick={() => changeWorkspace('textbooks')}>งานแต่งตำรา / หนังสือ</button>
+      </div>
+    </div>
+    {!courseFilter ? <p className={styles.note}>กรุณาเลือกรายวิชาก่อน เพื่อแสดงเฉพาะรายการของวิชานั้น</p> : <div className={styles.card}>
+      <div className={styles.sectionTitle}><div><h3>{workspace === 'textbooks' ? 'รายการตำรา / หนังสือ' : 'เอกสารประกอบการสอน'}</h3><p>{workspace === 'textbooks' ? 'ติดตามบทและหัวข้อของตำราในรายวิชาที่เลือก' : 'จัดการลิงก์เอกสารและเผยแพร่ให้นักศึกษาในรายวิชาที่เลือก'}</p></div><button type="button" className={styles.primary} disabled={busy} onClick={openNew}>{workspace === 'textbooks' ? '+ เพิ่มตำรา' : '+ เพิ่มเอกสาร'}</button></div>
       {formOpen && <form className={styles.editor} onSubmit={e => { e.preventDefault(); void save(); }} aria-label={editing ? 'แก้ไขเอกสาร' : 'เพิ่มเอกสาร'}>
         <h3>{editing ? 'แก้ไขเอกสาร' : 'เพิ่มเอกสาร'}</h3>
         <div className={styles.formGrid}>
           <label className={styles.field}>ชื่อเอกสาร *<input ref={titleInput} required maxLength={200} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="เช่น ตำรากลศาสตร์ของไหล บทที่ 1" /></label>
-          <label className={styles.field}>รายวิชา<select value={form.courseId} onChange={e => setForm({ ...form, courseId: e.target.value })}><option value="">ยังไม่ระบุรายวิชา</option>{courses.map(course => <option key={course.id} value={course.id}>{course.code} · {course.title} · {course.term}</option>)}</select></label>
-          <label className={styles.field}>ประเภทเอกสาร<select value={form.materialType} onChange={e => setForm({ ...form, materialType: e.target.value as MaterialType })}>{types.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+          <label className={styles.field}>รายวิชา<select disabled={lockedCourse} value={form.courseId} onChange={e => setForm({ ...form, courseId: e.target.value })}><option value="">ยังไม่ระบุรายวิชา</option>{courses.map(course => <option key={course.id} value={course.id}>{course.code} · {course.title} · {course.term}</option>)}</select></label>
+          <label className={styles.field}>ประเภทเอกสาร<select value={form.materialType} onChange={e => setForm({ ...form, materialType: e.target.value as MaterialType })}>{(editing ? types : workspaceTypes).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
           <label className={styles.field}>สถานะ<select value={form.materialStatus} onChange={e => setForm({ ...form, materialStatus: e.target.value as MaterialStatus })}>{statuses.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
           <label className={styles.field}>เวอร์ชัน<input maxLength={80} value={form.versionLabel} onChange={e => setForm({ ...form, versionLabel: e.target.value })} placeholder="เช่น 1.0 หรือ ฉบับปรับปรุง" /></label>
           <label className={styles.field}>ลิงก์ไฟล์<input type="url" maxLength={2048} value={form.externalUrl} onChange={e => setForm({ ...form, externalUrl: e.target.value })} placeholder="https://drive.google.com/..." /></label>
         </div>
+        {editing && <p className={styles.note}>หากเปลี่ยนรายวิชา ประเภท หรือข้อมูลเอกสารที่เผยแพร่แล้ว ระบบจะหยุดเผยแพร่จนกว่าอาจารย์จะตรวจสอบและเผยแพร่อีกครั้ง</p>}
         <label className={styles.field}>หมายเหตุ<textarea maxLength={2000} rows={3} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="เช่น ขอบเขตเนื้อหา หรือรายการที่ต้องตรวจสอบ" /></label>
         <div className={styles.actions}><button type="submit" className={styles.primary} disabled={busy}>บันทึกเอกสาร</button><button type="button" disabled={busy} onClick={closeForm}>ยกเลิก</button></div>
       </form>}
@@ -211,8 +254,7 @@ export default function MaterialsPanel({ teacherId, active }: { teacherId: strin
       </form>}
       <div className={styles.filters}>
         <label className={styles.field}>ค้นหาเอกสาร<input type="search" value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} placeholder="ค้นหาชื่อเอกสาร" /></label>
-        <label className={styles.field}>รายวิชา<select value={courseFilter} onChange={e => { setCourseFilter(e.target.value); setPage(0); }}><option value="">ทุกรายวิชา</option>{courses.map(course => <option key={course.id} value={course.id}>{course.code} · {course.title} · {course.term}</option>)}</select></label>
-        <label className={styles.field}>ประเภท<select value={typeFilter} onChange={e => { setTypeFilter(e.target.value); setPage(0); }}><option value="">ทุกประเภท</option>{types.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+        {workspace === 'materials' && <label className={styles.field}>ประเภท<select value={typeFilter} onChange={e => { setTypeFilter(e.target.value); setPage(0); }}><option value="">ทุกประเภทเอกสาร</option>{workspaceTypes.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>}
       </div>
       <label className={styles.check}><input type="checkbox" checked={showArchived} onChange={e => { setShowArchived(e.target.checked); setPage(0); }} /> แสดงรายการที่เก็บถาวร</label>
       {loading ? <p className={styles.empty}>กำลังโหลดเอกสาร...</p> : items.length ? <div className={styles.list}>{items.map(item => {
@@ -226,7 +268,7 @@ export default function MaterialsPanel({ teacherId, active }: { teacherId: strin
         </article>;
       })}</div> : <p className={styles.empty}>ยังไม่มีรายการเอกสารที่ตรงกับเงื่อนไข</p>}
       <Pagination page={page} total={total} onChange={setPage} />
-    </div>
+    </div>}
     </>}
   </section>;
 }

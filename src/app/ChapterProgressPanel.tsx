@@ -24,7 +24,9 @@ function errorText(value: unknown) {
   return error?.message || (value instanceof Error ? value.message : 'เกิดข้อผิดพลาด กรุณาลองอีกครั้ง');
 }
 
-export default function ChapterProgressPanel({ teacherId, materialId, materialTitle, active, onBack }: { teacherId: string; materialId: number; materialTitle: string; active: boolean; onBack: () => void }) {
+export default function ChapterProgressPanel({ teacherId, materialId, materialTitle, active, onBack, onDirtyChange }: {
+  teacherId: string; materialId: number; materialTitle: string; active: boolean; onBack: () => void; onDirtyChange?: (dirty: boolean) => void;
+}) {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [today, setToday] = useState(() => bangkokDate());
@@ -49,6 +51,8 @@ export default function ChapterProgressPanel({ teacherId, materialId, materialTi
   const selectedTopics = topics.filter(topic => topic.chapter_id === selectedId);
   const summary = useMemo(() => summarizeChapters(chapters, topics, today), [chapters, topics, today]);
   const dirty = (chapterFormOpen && JSON.stringify(chapterForm) !== JSON.stringify(initialChapterForm)) || Boolean(newTopics.trim()) || Boolean(editingTopic && topicTitle !== editingTopic.title);
+
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
 
   useEffect(() => {
     if (!active) return;

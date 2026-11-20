@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { db } from '../lib/supabase';
 import Pagination from './Pagination';
 import styles from './materials.module.css';
@@ -19,9 +19,8 @@ function errorText(value: unknown) {
   return (value as { message?: string } | null)?.message || 'กรุณาลองอีกครั้ง';
 }
 
-export default function StudentMaterials({ courses }: { courses: Course[] }) {
+export default function StudentMaterials({ course }: { course: Course }) {
   const [items, setItems] = useState<Publication[]>([]);
-  const [course, setCourse] = useState('');
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -29,20 +28,15 @@ export default function StudentMaterials({ courses }: { courses: Course[] }) {
   const [loadError, setLoadError] = useState('');
   const [openError, setOpenError] = useState('');
   const [refresh, setRefresh] = useState(0);
-  const courseKey = courses.map(c => c.id).sort((a,b) => a-b).join(',');
-  const coursesById = useMemo(() => new Map(courses.map(c => [c.id, c])), [courses]);
-
   useEffect(() => {
     let current = true;
-    const courseIds = courseKey ? courseKey.split(',').map(Number) : [];
-    if (!courseIds.length) { setItems([]); setTotal(0); setLoading(false); return () => { current = false; }; }
+    setItems([]); setTotal(0); setLoadError('');
     setLoading(true);
     void (async () => {
       try {
-        let query = db().from('material_publications')
+        const query = db().from('material_publications')
           .select('id,course_id,title,material_type,version_label,external_url', { count: 'exact' })
-          .eq('is_published', true).in('course_id', courseIds);
-        if (course) query = query.eq('course_id', Number(course));
+          .eq('is_published', true).eq('course_id', course.id);
         const result = await query.order('created_at', { ascending: false }).order('id', { ascending: false }).range(page * 10, page * 10 + 9);
         if (result.error) throw result.error;
         if (!current) return;
@@ -53,7 +47,7 @@ export default function StudentMaterials({ courses }: { courses: Course[] }) {
       finally { if (current) setLoading(false); }
     })();
     return () => { current = false; };
-  }, [courseKey, course, page, refresh]);
+  }, [course.id, page, refresh]);
 
   async function openDocument(item: Publication) {
     const url = safeLink(item.external_url);
@@ -76,13 +70,11 @@ export default function StudentMaterials({ courses }: { courses: Course[] }) {
 
   return <section className={`${styles.root} ${styles.studentSection}`} aria-label="เอกสารประกอบการเรียน">
     <div className={styles.card}>
-      <div className={styles.sectionTitle}><div><h3>เอกสารประกอบการเรียน</h3><p>เอกสารที่อาจารย์เผยแพร่ในรายวิชาที่ได้รับอนุมัติ</p></div><button type="button" onClick={() => setRefresh(value => value + 1)}>อัปเดตรายการ</button></div>
+      <div className={styles.sectionTitle}><div><h3>เอกสารประกอบการเรียน</h3><p>{course.code} · {course.title} · ภาคเรียน {course.term}</p></div><button type="button" onClick={() => setRefresh(value => value + 1)}>อัปเดตรายการ</button></div>
       <p className={styles.note}>ระบบบันทึกการกดขอเปิดผ่าน ME-Smart ไฟล์จะเปิดในบริการต้นทาง หากเปิดไม่ได้ให้ตรวจสอบบัญชีหรือสิทธิ์กับอาจารย์</p>
       {(openError || loadError) && <p role="alert" className={styles.error}>{openError || loadError}</p>}
-      {courses.length > 0 && <label className={styles.field}>รายวิชา<select value={course} onChange={e => { setCourse(e.target.value); setPage(0); }}><option value="">ทุกรายวิชา</option>{courses.map(c => <option key={c.id} value={c.id}>{c.code} · {c.title} · {c.term}</option>)}</select></label>}
-      {loading ? <p className={styles.empty}>กำลังโหลดเอกสาร...</p> : !items.length ? <p className={styles.empty}>ยังไม่มีเอกสารที่อาจารย์เผยแพร่ในรายวิชาที่เลือก</p> : <div className={styles.list}>{items.map(item => {
-        const c = coursesById.get(item.course_id);
-        return <article className={styles.item} key={item.id}><div><h4>{item.title}</h4><p>{c ? `${c.code} · ${c.title} · ${c.term}` : 'รายวิชา'}</p><div className={styles.tags}><span>{labels[item.material_type] || 'เอกสาร'}</span>{item.version_label && <span>เวอร์ชัน {item.version_label}</span>}</div></div><div className={styles.actions}><button type="button" className={styles.primary} disabled={opening !== null} onClick={() => void openDocument(item)}>{opening === item.id ? 'กำลังเปิด...' : 'เปิดเอกสาร ↗'}</button></div></article>;
+      {loading ? <p className={styles.empty}>กำลังโหลดเอกสาร...</p> : !items.length ? <p className={styles.empty}>ยังไม่มีเอกสารที่อาจารย์เผยแพร่ในรายวิชานี้</p> : <div className={styles.list}>{items.map(item => {
+        return <article className={styles.item} key={item.id}><div><h4>{item.title}</h4><div className={styles.tags}><span>{labels[item.material_type] || 'เอกสาร'}</span>{item.version_label && <span>เวอร์ชัน {item.version_label}</span>}</div></div><div className={styles.actions}><button type="button" className={styles.primary} disabled={opening !== null} onClick={() => void openDocument(item)}>{opening === item.id ? 'กำลังเปิด...' : 'เปิดเอกสาร ↗'}</button></div></article>;
       })}</div>}
       <Pagination page={page} total={total} onChange={setPage} />
     </div>

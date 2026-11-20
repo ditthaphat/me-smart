@@ -78,7 +78,7 @@ test('teacher publishes, student clicks, teacher sees current-roster counts, the
   const studentRows=teacher.root.findByType('tbody').findAllByType('tr');
   assert.match(textOf(studentRows[0]),/675040300425/);
   assert.match(textOf(studentRows[1]),/686040300125/);
-  let student; await act(async()=>{student=create(React.createElement(Student,{courses}));});
+  let student; await act(async()=>{student=create(React.createElement(Student,{course:courses[0]}));});
   assert.match(textOf(student.root),/บทที่ 1/);
   await click(button(student.root,'เปิดเอกสาร ↗'));
   assert.equal(records.material_open_events.length,1);
@@ -102,9 +102,26 @@ test('teacher publishes, student clicks, teacher sees current-roster counts, the
 test('popup-blocked browsers still navigate after the request was recorded',async()=>{
   records.material_publications[0].is_published=true; rejectClick=false;
   window.open=()=>null;
-  let student; await act(async()=>{student=create(React.createElement(Student,{courses:[{id:5,code:'4112203',title:'Fluid Mechanics',term:'2/2569'}]}));});
+  let student; await act(async()=>{student=create(React.createElement(Student,{course:{id:5,code:'4112203',title:'Fluid Mechanics',term:'2/2569'}}));});
   await click(button(student.root,'เปิดเอกสาร ↗'));
   assert.equal(records.material_open_events.length,2);
   assert.equal(fallbackUrl,'https://example.com/chapter');
   await act(async()=>student.unmount());
+});
+
+test('student document lists are scoped to the selected course',async()=>{
+  records.material_publications=[
+    {id:51,course_id:5,title:'เอกสารของไหล',material_type:'lesson',version_label:'',external_url:'https://example.com/fluid',is_published:true},
+    {id:52,course_id:7,title:'เอกสาร CAE',material_type:'slides',version_label:'',external_url:'https://example.com/cae',is_published:true},
+    {id:53,course_id:5,title:'เอกสารยังไม่เผยแพร่',material_type:'lesson',version_label:'',external_url:'https://example.com/private',is_published:false},
+  ];
+  let first,second;
+  try{
+    await act(async()=>{first=create(React.createElement(Student,{course:{id:5,code:'4112203',title:'Fluid',term:'2/2569'}}));});
+    assert.match(textOf(first.root),/เอกสารของไหล/);
+    assert.doesNotMatch(textOf(first.root),/เอกสาร CAE|เอกสารยังไม่เผยแพร่/);
+    await act(async()=>{second=create(React.createElement(Student,{course:{id:7,code:'4111307',title:'CAE',term:'2/2569'}}));});
+    assert.match(textOf(second.root),/เอกสาร CAE/);
+    assert.doesNotMatch(textOf(second.root),/เอกสารของไหล|เอกสารยังไม่เผยแพร่/);
+  }finally{if(first)await act(async()=>first.unmount());if(second)await act(async()=>second.unmount());}
 });

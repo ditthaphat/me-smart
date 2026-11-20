@@ -55,11 +55,13 @@ function FakeAttendance({ onLockChange }) {
     React.createElement('button', { 'data-testid': 'lock', onClick: () => onLockChange(true) }, 'lock'),
     React.createElement('button', { 'data-testid': 'unlock', onClick: () => onLockChange(false) }, 'unlock'));
 }
-function FakeMaterials() {
+function FakeMaterials({initialCourseId,onDirtyChange}) {
   const [draft,setDraft]=React.useState('');
   React.useEffect(()=>{materialMounts++;},[]);
-  return React.createElement('input',{'data-testid':'materials-draft',value:draft,onChange:e=>setDraft(e.target.value)});
+  React.useEffect(()=>{onDirtyChange?.(Boolean(draft));},[draft,onDirtyChange]);
+  return React.createElement('input',{'data-testid':'materials-draft','data-course':initialCourseId,value:draft,onChange:e=>setDraft(e.target.value)});
 }
+const fakeStudentMaterials=({course})=>React.createElement('div',{'data-testid':'my-materials','data-course':course.id});
 const emptyComponent = () => null;
 const originalLoad = Module._load;
 Module._load = function (request, parent, isMain) {
@@ -69,9 +71,10 @@ Module._load = function (request, parent, isMain) {
     if (request === '../lib/supabase') return { db: () => fakeDb };
     if (request === './AttendancePanel') return { __esModule: true, default: FakeAttendance };
     if (request === './MaterialsPanel') return { __esModule: true, default: FakeMaterials };
+    if (request === './StudentMaterials') return { __esModule: true, default: fakeStudentMaterials };
     if (request === './StudentGradebook') return { __esModule: true, default: ({userId,course}) => React.createElement('div',{'data-testid':'my-gradebook','data-user':userId,'data-course':course.id}) };
     if (request === './Pagination') return { __esModule: true, default: ({page,onChange}) => React.createElement('nav', null, React.createElement('button', {'data-testid':'next-page',onClick:()=>onChange(page+1)},'ถัดไป')) };
-    if (['./AttendanceSecurity', './AttendanceAnalytics', './StudentLeaveRequest', './StudentMaterials', './TeacherLeaveApproval', './AdvisingPanel', './GradebookPanel', './ResearchPanel'].includes(request)) {
+    if (['./AttendanceSecurity', './AttendanceAnalytics', './StudentLeaveRequest', './TeacherLeaveApproval', './AdvisingPanel', './GradebookPanel', './ResearchPanel'].includes(request)) {
       return { __esModule: true, default: emptyComponent };
     }
     if (request.endsWith('.css')) return { __esModule: true, default: new Proxy({}, { get: (_, key) => String(key) }) };
@@ -155,18 +158,50 @@ test('student dashboard keeps its course list without teacher navigation', async
 });
 
 test('students get a score button only for an approved course',async()=>{
- studentCourses=[course,{id:6,code:'PENDING',title:'รออนุมัติ',term:'2/2569',status:'pending'}];
+ studentCourses=[course,{id:7,code:'CAE',title:'CAE',term:'2/2569',status:'approved'},{id:6,code:'PENDING',title:'รออนุมัติ',term:'2/2569',status:'pending'}];
  let renderer;
  try{
   renderer=await renderHome('student');
   const buttons=renderer.root.findAllByType('button').filter(button=>button.children.includes('ดูคะแนนของฉัน →'));
-  assert.equal(buttons.length,1);
+  assert.equal(buttons.length,2);
   await click(buttons[0]);
   assert.equal(renderer.root.findByProps({'data-testid':'my-gradebook'}).props['data-course'],5);
+  const documents=renderer.root.findAllByType('button').filter(button=>button.children.includes('เอกสารรายวิชานี้ →'));
+  assert.equal(documents.length,2);
+  await click(documents[1]);
+  assert.equal(renderer.root.findByProps({'data-testid':'my-materials'}).props['data-course'],7);
+  assert.equal(renderer.root.findAllByProps({'data-testid':'my-gradebook'}).length,0);
+  await click(renderer.root.findAllByType('button').find(button=>button.children.includes('เอกสารรายวิชานี้ →')));
+  assert.equal(renderer.root.findByProps({'data-testid':'my-materials'}).props['data-course'],5);
  }finally{
   studentCourses=[course];
   if(renderer)await act(async()=>renderer.unmount());
  }
+});
+
+test('course documents preserve an unsaved draft across tabs and ask before closing the course',async()=>{
+ const oldWindow=global.window;
+ let accept=false;
+ global.window={confirm:()=>accept};
+ const renderer=await renderHome('teacher');
+ try{
+  const root=renderer.root;
+  await click(byId(root,'teacher-tab-courses'));
+  await click(root.findAllByType('button').find(b=>b.children.includes('จัดการรายวิชา →')));
+  await click(root.findAllByType('button').find(b=>b.children.includes('เอกสาร / ตำรา')));
+  let draft=root.findByProps({'data-testid':'materials-draft'});
+  assert.equal(draft.props['data-course'],5);
+  await act(async()=>draft.props.onChange({target:{value:'ยังไม่บันทึก'}}));
+  await click(root.findAllByType('button').find(b=>b.children.includes('รายงาน')));
+  await click(root.findAllByType('button').find(b=>b.children.includes('เอกสาร / ตำรา')));
+  draft=root.findByProps({'data-testid':'materials-draft'});
+  assert.equal(draft.props.value,'ยังไม่บันทึก');
+  await click(root.findAllByType('button').find(b=>b.children.includes('ปิดรายละเอียด')));
+  assert.ok(root.findByProps({id:'course-management'}));
+  accept=true;
+  await click(root.findAllByType('button').find(b=>b.children.includes('ปิดรายละเอียด')));
+  assert.equal(root.findAllByProps({id:'course-management'}).length,0);
+ }finally{await act(async()=>renderer.unmount());global.window=oldWindow;}
 });
 
 test('teaching materials opens lazily and keeps unsaved work while switching tabs', async () => {
