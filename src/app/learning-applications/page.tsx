@@ -6,7 +6,7 @@ import {db} from '../../lib/supabase';
 type Course={code:string;status?:string};
 const apps=[
  {id:'fluid-properties',title:'Fluid Properties',thai:'สมบัติของไหล',topic:'พื้นฐาน',detail:'ความหนาแน่น ความหนืด และความถ่วงจำเพาะ',ready:false},
- {id:'pressure-manometry',title:'Pressure & Manometry',thai:'ความดันและแมนอมิเตอร์',topic:'ความดัน',detail:'ความดันเกจ ความดันสัมบูรณ์ และระดับของเหลว',ready:false},
+ {id:'pressure-manometry',title:'Pressure & Manometry',thai:'ความดันและแมนอมิเตอร์',topic:'ความดัน',detail:'ทดลองความดันเกจ ความดันสัมบูรณ์ และเฮดความดัน (แมนอมิเตอร์หลายของเหลวอยู่ระหว่างพัฒนา)',ready:true},
  {id:'hydrostatic-pressure',title:'Hydrostatic Pressure',thai:'การกระจายความดันสถิต',topic:'ของไหลสถิต',detail:'ความสัมพันธ์ระหว่างความลึกและความดัน',ready:false},
  {id:'hydrostatic-forces',title:'Hydrostatic Forces',thai:'แรงดันของเหลวบนพื้นผิว',topic:'ของไหลสถิต',detail:'แรงลัพธ์และจุดศูนย์กลางความดัน',ready:false},
  {id:'buoyancy',title:'Buoyancy & Stability',thai:'แรงลอยตัวและเสถียรภาพ',topic:'ของไหลสถิต',detail:'การจม การลอย และเสถียรภาพ',ready:false},
@@ -47,7 +47,7 @@ export default function LearningHub(){
  {filtered.map(a=><article key={a.id} style={{background:'white',border:'1px solid #d4e3eb',borderRadius:16,padding:20,display:'flex',flexDirection:'column',gap:10}}>
  <span style={{fontSize:13,color:'#53738a'}}>{a.topic} · {a.ready?'พร้อมทดลอง':'กำลังวางแผน'}</span>
  <h2 style={{fontSize:19,margin:0}}>{a.title}</h2><strong>{a.thai}</strong><p style={{margin:0,flex:1,color:'#48657a'}}>{a.detail}</p>
- {a.ready?<Link href="/learning-applications/fluid-mechanics/couette-poiseuille" style={{display:'block',background:'#0b678c',color:'white',textAlign:'center',padding:12,borderRadius:10,textDecoration:'none'}}>เปิดห้องทดลอง →</Link>:<span style={{padding:12,background:'#f0f4f7',color:'#657988',borderRadius:10,textAlign:'center'}}>ยังไม่เปิดใช้งาน</span>}
+ {a.ready?<Link href={a.id==='pressure-manometry'?'/learning-applications/fluid-mechanics/pressure-manometry':'/learning-applications/fluid-mechanics/couette-poiseuille'} style={{display:'block',background:'#0b678c',color:'white',textAlign:'center',padding:12,borderRadius:10,textDecoration:'none'}}>เปิดห้องทดลอง →</Link>:<span style={{padding:12,background:'#f0f4f7',color:'#657988',borderRadius:10,textAlign:'center'}}>ยังไม่เปิดใช้งาน</span>}
  </article>)}</div>
  {filtered.length===0&&<p>ไม่พบแอปที่ตรงกับคำค้นหา</p>}
  <p style={{fontSize:13,color:'#657988',marginTop:24}}>แอปที่ยังไม่พร้อมเป็นแผนพัฒนา ไม่มีการบันทึกคะแนนหรือส่งงานในรุ่นนี้</p>
