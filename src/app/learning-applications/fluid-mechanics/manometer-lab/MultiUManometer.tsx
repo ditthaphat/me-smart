@@ -34,9 +34,9 @@ export default function MultiUManometer(){
  const y=(height:number)=>255-(height/top)*190;
  const tube=(i:number)=>{const x=57+i*182, x2=x+118, bottom=282, leftY=y(selected[i].left),rightY=y(selected[i].right);const heavy=fluid(selected[i].fluid).color,upper=fluid(carrier).color;
   return <g key={i}>
-   <path d={`M${x} 55 V${bottom-24} Q${x} ${bottom} ${x+24} ${bottom} H${x2-24} Q${x2} ${bottom} ${x2} ${bottom-24} V55`} fill="none" stroke="#426c82" strokeWidth="26" strokeLinejoin="round"/>
-   <path d={`M${x} 55 V${bottom-24} Q${x} ${bottom} ${x+24} ${bottom} H${x2-24} Q${x2} ${bottom} ${x2} ${bottom-24} V55`} fill="none" stroke="#f4f9fc" strokeWidth="18"/>
-   <path d={`M${x} ${leftY} V${bottom-24} Q${x} ${bottom} ${x+24} ${bottom} H${x2-24} Q${x2} ${bottom} ${x2} ${bottom-24} V${rightY}`} fill="none" stroke={heavy} strokeWidth="18"/>
+   <path d={`M${x} 55 V${bottom-66} C${x} ${bottom+24} ${x2} ${bottom+24} ${x2} ${bottom-66} V55`} fill="none" stroke="#426c82" strokeWidth="26" strokeLinejoin="round" strokeLinecap="round"/>
+   <path d={`M${x} 55 V${bottom-66} C${x} ${bottom+24} ${x2} ${bottom+24} ${x2} ${bottom-66} V55`} fill="none" stroke="#f4f9fc" strokeWidth="18"/>
+   <path d={`M${x} ${leftY} V${bottom-66} C${x} ${bottom+24} ${x2} ${bottom+24} ${x2} ${bottom-66} V${rightY}`} fill="none" stroke={heavy} strokeWidth="18"/>
    <path d={`M${x} 55 V${leftY}`} stroke={upper} strokeWidth="18"/>
    <path d={`M${x2} ${rightY} V55`} stroke={upper} strokeWidth="18"/>
    <line x1={x-23} x2={x+15} y1={leftY} y2={leftY} stroke="#233e56" strokeWidth="1.5" strokeDasharray="3 2"/>
