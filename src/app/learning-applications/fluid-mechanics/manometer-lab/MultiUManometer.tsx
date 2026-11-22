@@ -30,11 +30,11 @@ export default function MultiUManometer(){
  const err=answer.trim()!==''&&Number.isFinite(Number(answer))&&valid?100*Math.abs(Number(answer)-pB)/Math.max(1,Math.abs(pB)):null;
  const edit=(i:number,patch:Partial<Column>)=>setColumns(old=>old.map((c,j)=>i===j?{...c,...patch}:c));
  const changeFluid=(i:number,name:string)=>{const f=fluid(name);edit(i,{fluid:name,rho:f.rho})};
- const W=90+count*182, H=335;
- const y=(height:number)=>255-(height/top)*190;
- const tube=(i:number)=>{const x=57+i*182, x2=x+118, bottom=282, leftY=y(selected[i].left),rightY=y(selected[i].right);const heavy=fluid(selected[i].fluid).color,upper=fluid(carrier).color;
+ const W=125+count*182, H=350;
+ const y=(height:number)=>216-(height/top)*155;
+ const tube=(i:number)=>{const x=72+i*182, x2=x+118, bottom=282, leftY=y(selected[i].left),rightY=y(selected[i].right);const heavy=fluid(selected[i].fluid).color,upper=fluid(carrier).color;
   return <g key={i}>
-   <path d={`M${x} 55 V${bottom-66} C${x} ${bottom+24} ${x2} ${bottom+24} ${x2} ${bottom-66} V55`} fill="none" stroke="#426c82" strokeWidth="26" strokeLinejoin="round" strokeLinecap="round"/>
+   <path d={`M${x} 55 V${bottom-66} C${x} ${bottom+24} ${x2} ${bottom+24} ${x2} ${bottom-66} V55`} fill="none" stroke="#426c82" strokeWidth="26" strokeLinejoin="round" strokeLinecap="butt"/>
    <path d={`M${x} 55 V${bottom-66} C${x} ${bottom+24} ${x2} ${bottom+24} ${x2} ${bottom-66} V55`} fill="none" stroke="#f4f9fc" strokeWidth="18"/>
    <path d={`M${x} ${leftY} V${bottom-66} C${x} ${bottom+24} ${x2} ${bottom+24} ${x2} ${bottom-66} V${rightY}`} fill="none" stroke={heavy} strokeWidth="18"/>
    <path d={`M${x} 55 V${leftY}`} stroke={upper} strokeWidth="18"/>
@@ -63,10 +63,10 @@ export default function MultiUManometer(){
  <div style={{overflowX:'auto',marginTop:18,padding:12,background:'#f8fcfd',borderRadius:12}}>
  <svg viewBox={`0 0 ${W} ${H}`} style={{display:'block',width:'100%',minWidth:Math.max(450,W),maxWidth:1000}} role="img" aria-label={`ภาพท่อ U ${count} ชุดต่อเนื่องกัน แสดงของไหลและระดับรอยต่อซ้ายขวาตามข้อมูลที่กรอก`}>
  {selected.map((_,i)=>tube(i))}
- <text x="16" y="39" fontSize="16" fontWeight="bold">A</text><text x={W-27} y="39" fontSize="16" fontWeight="bold">B</text>
- <text x="15" y="328" fontSize="12">z = 0 ที่ฐานท่อ · ระดับรอยต่อแสดงตามสัดส่วน H</text>
+ <path d="M18 55 H72" stroke="#426c82" strokeWidth="26"/><path d="M18 55 H72" stroke={fluid(carrier).color} strokeWidth="18"/><path d={\`M\${72+(count-1)*182+118} 55 H\${W-18}\`} stroke="#426c82" strokeWidth="26"/><path d={\`M\${72+(count-1)*182+118} 55 H\${W-18}\`} stroke={fluid(carrier).color} strokeWidth="18"/><text x="12" y="26" fontSize="16" fontWeight="bold">A</text><text x={W-26} y="26" fontSize="16" fontWeight="bold">B</text>
+ <text x="15" y="328" fontSize="12">z = 0 ที่ระดับเริ่มโค้ง (เส้นอ้างอิงแนวดิ่ง) · ระดับรอยต่อแสดงตามสัดส่วน H</text>
  </svg></div>
- <p style={{fontSize:13}}>ภาพแสดงระดับรอยต่อของไหลตามค่าที่ป้อนจริงบนแกนความสูงร่วมกัน สีแยกชนิดของไหล แต่ไม่ได้คำนวณการเคลื่อนตัวของผิวรอยต่อจากปริมาตรท่อ หากค่าความดันที่กำหนดไม่สอดคล้องกับสมดุล ระบบจะคำนวณ P_B ที่ต้องเป็นเพื่อให้สมดุล</p>
+ <p style={{fontSize:13}}>ปลาย A และ B เป็นจุดต่อท่อที่ระดับเดียวกัน; เส้นสีด้านบนคือของไหลหลัก ส่วนโค้งแต่ละ U เป็นของไหลที่เลือก · ภาพแสดงระดับรอยต่อของไหลตามค่าที่ป้อนจริงบนแกนความสูงร่วมกัน สีแยกชนิดของไหล แต่ไม่ได้คำนวณการเคลื่อนตัวของผิวรอยต่อจากปริมาตรท่อ หากค่าความดันที่กำหนดไม่สอดคล้องกับสมดุล ระบบจะคำนวณ P_B ที่ต้องเป็นเพื่อให้สมดุล</p>
  {!valid&&<p role="alert" style={{color:'#b42318',fontWeight:700}}>ตรวจสอบข้อมูล: ต้องมี ρ ของไหลในแต่ละ U มากกว่า ρ ของไหลหลัก, 0 ≤ zL,zR ≤ H และ P_B ต้องไม่ติดลบ</p>}
  <div style={{background:'#eaf5f8',padding:16,borderRadius:10,marginTop:16}}><strong>คำนวณความดันที่ B</strong><p style={{fontSize:23,fontWeight:700}}>{valid?fmt(pB):'—'} kPa abs</p><p>P_B = P_A + Σ[(ρ_U − ρ_main)g(zL − zR)]/1000</p><label style={{display:'block'}}>คำตอบของนักศึกษา (kPa abs)<input style={fieldStyle} type="number" step="any" value={answer} onChange={e=>setAnswer(e.target.value)}/></label>{err!==null&&<p style={{color:err<=1?'#087852':'#b45309'}}>คลาดเคลื่อน {fmt(err)}% · {err<=1?'ผ่านเกณฑ์ ±1%':'โปรดตรวจทิศทางและหน่วย'}</p>}<button type="button" onClick={()=>setShow(v=>!v)} style={{padding:'10px 16px',marginTop:10,background:'#0c6c7d',color:'white',border:0,borderRadius:8,cursor:'pointer'}}>{show?'ซ่อนวิธีทำ':'แสดงวิธีทำทีละขั้น'}</button>{show&&valid&&<div style={{marginTop:12}}>{selected.map((c,i)=><p key={i}>U{i+1}: ({fmt(c.rho)} − {fmt(rhoCarrier)}) × 9.81 × ({fmt(c.left)} − {fmt(c.right)}) / 1000 = {fmt(terms[i])} kPa</p>)}<p>P_B = {fmt(pA)} + ({terms.map(t=>fmt(t)).join(' + ')}) = {fmt(pB)} kPa abs</p></div>}</div>
  <p style={{fontSize:13,marginTop:15}}>ข้อจำกัด: แบบจำลองนี้รองรับของไหลหลักชนิดเดียวในท่อเชื่อมและของไหลหนักหนึ่งชนิดต่อ U, จุด A และ B อยู่ระดับเดียวกัน ไม่รองรับอากาศหรือของไหลเบาที่อยู่แยกเป็นชั้นบนสะพานเชื่อมหลายชนิดแบบ Figure P3–44 อย่างครบถ้วน และไม่รวม capillarity · อ้างอิง Çengel &amp; Cimbala (2020), Chapter 3, Figure P3–44</p>
