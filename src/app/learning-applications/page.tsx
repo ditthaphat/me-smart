@@ -12,7 +12,15 @@ export default function LearningApplications() {
   const h = hmm / 1000, L = 0.1;
   useEffect(() => {
     let active = true;
-    db().auth.getUser().then(({data}) => { if(active) setAuth(data.user ? 'allowed':'denied'); })
+    db().auth.getUser().then(async ({data}) => {
+      if (!data.user) { if(active) setAuth('denied'); return; }
+      const {data: profile, error: profileError} = await db().from('profiles').select('role').eq('id',data.user.id).single();
+      if (profileError || !profile) { if(active) setAuth('denied'); return; }
+      if (profile.role === 'teacher') { if(active) setAuth('allowed'); return; }
+      if (profile.role !== 'student') { if(active) setAuth('denied'); return; }
+      const {data: enrollment, error: enrollmentError} = await db().from('enrollments').select('course_id').eq('student_id',data.user.id).eq('status','approved').limit(1);
+      if(active) setAuth(!enrollmentError && (enrollment?.length ?? 0)>0 ? 'allowed':'denied');
+    })
       .catch(() => {if(active) setAuth('denied');});
     return () => {active = false;};
   }, []);
@@ -29,7 +37,7 @@ export default function LearningApplications() {
   const y = (z:number) => 290-z*240;
   const curve = profile.map((p,i)=>`${i?'L':'M'} ${x(p.velocity).toFixed(2)} ${y(p.z).toFixed(2)}`).join(' ');
   if(auth==='loading') return <main style={{padding:32}}>กำลังตรวจสอบสิทธิ์ผู้ใช้งาน...</main>;
-  if(auth==='denied') return <main style={{padding:32}}><h1>Learning Applications</h1><p>กรุณาเข้าสู่ระบบ ME-SMART ก่อนใช้งาน</p><Link href="/">เข้าสู่ระบบ</Link></main>;
+  if(auth==='denied') return <main style={{padding:32}}><h1>Learning Applications</h1><p>กรุณาเข้าสู่ระบบ ME-SMART และตรวจสอบสิทธิ์การลงทะเบียนรายวิชาที่ได้รับอนุมัติก่อนใช้งาน</p><Link href="/">เข้าสู่ระบบ</Link></main>;
   return <main style={{maxWidth:1050,margin:'0 auto',padding:'24px 18px',fontFamily:'system-ui, sans-serif',color:'#14263d'}}>
     <Link href="/">← กลับสู่ ME-SMART</Link>
     <h1>Learning Applications | แอปพลิเคชันเสริมการเรียนรู้</h1>
