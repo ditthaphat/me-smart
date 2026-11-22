@@ -442,6 +442,7 @@ export default function Home() {
             <h3>{c.code} — {c.title}</h3><p className={styles.muted}>ภาคเรียน {c.term}</p>
             {profile.role === 'teacher' && <button type="button" className={styles.secondaryButton} disabled={membersLoading} onClick={() => void openCourse(c.id)}>จัดการรายวิชา →</button>}
             {profile.role === 'student' && c.status === 'approved' && <div className={styles.actions}>
+              <Link href="/learning-applications" className={styles.secondaryButton}>แอปเสริมการเรียนรู้ →</Link>
               <button type="button" className={styles.secondaryButton} aria-expanded={studentGradeCourseId===c.id} aria-controls={studentGradeCourseId===c.id?'student-gradebook':undefined} onClick={()=>{setStudentMaterialCourseId(null);setStudentGradeCourseId(current=>current===c.id?null:c.id);}}>{studentGradeCourseId===c.id?'ปิดตารางคะแนน':'ดูคะแนนของฉัน →'}</button>
               <button type="button" className={styles.secondaryButton} aria-expanded={studentMaterialCourseId===c.id} aria-controls={studentMaterialCourseId===c.id?'student-materials':undefined} onClick={()=>{setStudentGradeCourseId(null);setStudentMaterialCourseId(current=>current===c.id?null:c.id);}}>{studentMaterialCourseId===c.id?'ปิดเอกสาร':'เอกสารรายวิชานี้ →'}</button>
             </div>}
