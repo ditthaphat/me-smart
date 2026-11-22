@@ -23,7 +23,7 @@ export default function FluidPropertiesCalculator(){
  if(access==='loading')return <main style={{padding:32}}>กำลังตรวจสอบสิทธิ์...</main>;
  if(access==='denied')return <main style={{padding:32}}><h1>Fluid Properties</h1><p>เฉพาะอาจารย์และนักศึกษาที่ได้รับอนุมัติรายวิชา 4112203</p><Link href="/">กลับสู่ ME-SMART</Link></main>;
  const fields=[{key:'rho',label:'Density ρ',unit:'kg/m³'},{key:'mu',label:'Dynamic viscosity μ',unit:'kg/(m·s)'},{key:'nu',label:'Kinematic viscosity ν',unit:'m²/s'},{key:'cp',label:'Specific heat cp',unit:'J/(kg·K)'},{key:'k',label:'Thermal conductivity k',unit:'W/(m·K)'},{key:'pr',label:'Prandtl number',unit:'–'}] as const;
- const format=(n:number)=>Math.abs(n)<.001&&n!==0?n.toExponential(5):n.toPrecision(7).replace(/\.?0+$/,'');
+ const format=(n:number)=>Math.abs(n)<.001&&n!==0?n.toExponential(5):Number(n.toPrecision(7)).toString();
  return <main style={{maxWidth:1000,margin:'0 auto',padding:24,fontFamily:'system-ui,sans-serif',color:'#173b53'}}>
  <Link href="/learning-applications">← กลับสู่ Learning Hub</Link>
  <header style={{margin:'20px 0',padding:26,borderRadius:18,background:'linear-gradient(110deg,#133b60,#11848b)',color:'white'}}>
