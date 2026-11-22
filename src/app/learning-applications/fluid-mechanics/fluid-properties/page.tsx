@@ -22,6 +22,24 @@ export default function FluidPropertiesCalculator(){
  useEffect(()=>{if(access!=='allowed')return;void db().rpc('record_learning_app_visit',{p_app_id:'fluid-properties'}).then(({error})=>{if(error)console.warn('Visit tracking unavailable',error.message)});},[access]);
  if(access==='loading')return <main style={{padding:32}}>กำลังตรวจสอบสิทธิ์...</main>;
  if(access==='denied')return <main style={{padding:32}}><h1>Fluid Properties</h1><p>เฉพาะอาจารย์และนักศึกษาที่ได้รับอนุมัติรายวิชา 4112203</p><Link href="/">กลับสู่ ME-SMART</Link></main>;
+ const catalog=[
+ ['A–1','Molar mass, gas constant and ideal-gas specific heats','948','ค่าคงที่ของสาร'],
+ ['A–2','Boiling and freezing point properties','949','จุดเดือดและจุดเยือกแข็ง'],
+ ['A–3','Properties of saturated water','950','น้ำอิ่มตัว'],
+ ['A–4','Properties of saturated refrigerant-134a','951','สารทำความเย็น R-134a'],
+ ['A–5','Properties of saturated ammonia','952','แอมโมเนียอิ่มตัว'],
+ ['A–6','Properties of saturated propane','953','โพรเพนอิ่มตัว'],
+ ['A–7','Properties of liquids','954','ของเหลว'],
+ ['A–8','Properties of liquid metals','955','โลหะเหลว'],
+ ['A–9','Properties of air at 1 atm pressure','956','อากาศที่ 1 atm'],
+ ['A–10','Properties of gases at 1 atm pressure','957–958','ก๊าซที่ 1 atm'],
+ ['A–11','Properties of atmosphere at high altitude','959','บรรยากาศที่ระดับสูง'],
+ ['A–12','Moody chart for fully developed pipe flow','960','กราฟ Moody'],
+ ['A–13','One-dimensional isentropic compressible flow','961','การไหลอัดตัวได้แบบไอเซนโทรปิก'],
+ ['A–14','One-dimensional normal shock functions','962','คลื่นกระแทกปกติ'],
+ ['A–15','Rayleigh flow functions','963','การไหล Rayleigh'],
+ ['A–16','Fanno flow functions','964','การไหล Fanno']
+ ];
  const fields=[{key:'rho',label:'Density ρ',unit:'kg/m³'},{key:'mu',label:'Dynamic viscosity μ',unit:'kg/(m·s)'},{key:'nu',label:'Kinematic viscosity ν',unit:'m²/s'},{key:'cp',label:'Specific heat cp',unit:'J/(kg·K)'},{key:'k',label:'Thermal conductivity k',unit:'W/(m·K)'},{key:'pr',label:'Prandtl number',unit:'–'}] as const;
  const format=(n:number)=>Math.abs(n)<.001&&n!==0?n.toExponential(5):Number(n.toPrecision(7)).toString();
  return <main style={{maxWidth:1000,margin:'0 auto',padding:24,fontFamily:'system-ui,sans-serif',color:'#173b53'}}>
@@ -40,5 +58,5 @@ export default function FluidPropertiesCalculator(){
  {result.interpolated&&<div style={{marginTop:18,padding:16,background:'#f3f5f8',borderRadius:12}}><strong>วิธีคำนวณ</strong><p>ใช้แถวที่ T₁ = {result.lower.t} °C และ T₂ = {result.upper.t} °C</p><p>X(T) = X₁ + [(T − T₁)/(T₂ − T₁)] × (X₂ − X₁)</p><p>ตัวอย่าง Density: {format(result.lower.rho)} + [({temperature} − {result.lower.t})/({result.upper.t} − {result.lower.t})] × ({format(result.upper.rho)} − {format(result.lower.rho)}) = <strong>{format(result.row.rho)} kg/m³</strong></p></div>}
  </>}
  <p style={{fontSize:13,color:'#687d8d',marginTop:18}}>หมายเหตุ: ขณะนี้เป็นข้อมูลที่ถอดและตรวจสอบเฉพาะบางแถวจาก PDF ต้นฉบับ ยังไม่ครอบคลุมทุกสารและทุกอุณหภูมิ ค่า ν จะแสดงเฉพาะเมื่อมีข้อมูลในตารางนั้น ไม่ใช้ค่าคำนวณแทนโดยไม่ระบุ</p>
- </section></main>;
+ </section><section style={{marginTop:22,padding:20,background:'white',border:'1px solid #c9dce5',borderRadius:14}}><h2>สารบัญตารางต้นฉบับ A–1 ถึง A–16</h2><p>แสดงครบทุกหัวข้อในเอกสาร แต่เครื่องคำนวณด้านบนยังรองรับข้อมูลเชิงตัวเลขเฉพาะบางตารางเท่านั้น ตารางอื่นต้องตรวจสอบและนำเข้าข้อมูลก่อนเปิดใช้คำนวณ</p><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:10}}>{catalog.map(([id,title,page,thai])=><div key={id} style={{border:'1px solid #d9e4ec',borderRadius:10,padding:12}}><strong>{id} · หน้า {page}</strong><div>{title}</div><small>{thai}</small><div style={{fontSize:12,color:'#6c7d8a'}}>{['A–3','A–7','A–9','A–10'].includes(id)?'มีข้อมูลคำนวณบางช่วง':'ยังไม่มีข้อมูลคำนวณที่ตรวจสอบแล้ว'}</div></div>)}</div></section></main>;
 }
