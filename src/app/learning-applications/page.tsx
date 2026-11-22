@@ -1,83 +1,55 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import {useEffect,useMemo,useState} from 'react';
 import Link from 'next/link';
-import { db } from '../../lib/supabase';
+import {db} from '../../lib/supabase';
 
-export default function LearningApplications() {
-  const [auth, setAuth] = useState<'loading'|'allowed'|'denied'>('loading');
-  const [u, setU] = useState(0.4);
-  const [hmm, setHmm] = useState(1);
-  const [mu, setMu] = useState(0.1);
-  const [dp, setDp] = useState(100);
-  const h = hmm / 1000, L = 0.1;
-  useEffect(() => {
-    let active = true;
-    db().auth.getUser().then(async ({data}) => {
-      if (!data.user) { if(active) setAuth('denied'); return; }
-      const {data: profile, error: profileError} = await db().from('profiles').select('role').eq('id',data.user.id).single();
-      if (profileError || !profile) { if(active) setAuth('denied'); return; }
-      if (profile.role === 'teacher') { if(active) setAuth('allowed'); return; }
-      if (profile.role !== 'student') { if(active) setAuth('denied'); return; }
-      // Reuse the same student-visible course source as the ME-SMART dashboard.
-      // Direct courses/enrollments SELECTs may be restricted by RLS.
-      const {data: myCourses, error: courseError} = await db().rpc('my_courses');
-      if (courseError) { if(active) setAuth('denied'); return; }
-      const eligible = (myCourses ?? []).some((course: {code:string;status?:string}) =>
-        course.code === '4112203' && course.status === 'approved');
-      if(active) setAuth(eligible ? 'allowed':'denied');
-    })
-      .catch(() => {if(active) setAuth('denied');});
-    return () => {active = false;};
-  }, []);
-  const profile = useMemo(() => Array.from({length:41},(_,i) => {
-    const z = i/40;
-    return {z, velocity: u*z + dp*h*h*z*(1-z)/(2*mu*L)};
-  }),[u,dp,h,mu]);
-  const q = u*h/2 + dp*h*h*h/(12*mu*L);
-  const tauBottom = mu*u/h + dp*h/(2*L);
-  const tauTop = mu*u/h - dp*h/(2*L);
-  const minV = Math.min(0,...profile.map(p=>p.velocity));
-  const maxV = Math.max(0,...profile.map(p=>p.velocity));
-  const x = (v:number) => 80 + (v-minV)/(maxV-minV || 1)*520;
-  const y = (z:number) => 290-z*240;
-  const curve = profile.map((p,i)=>`${i?'L':'M'} ${x(p.velocity).toFixed(2)} ${y(p.z).toFixed(2)}`).join(' ');
-  if(auth==='loading') return <main style={{padding:32}}>กำลังตรวจสอบสิทธิ์ผู้ใช้งาน...</main>;
-  if(auth==='denied') return <main style={{padding:32}}><h1>Learning Applications</h1><p>การเข้าใช้งานแบบจำลองนี้จำกัดเฉพาะนักศึกษาที่ลงทะเบียนและได้รับอนุมัติในรายวิชา 4112203 Fluid Mechanics (หรืออาจารย์ผู้สอน)</p><Link href="/">เข้าสู่ระบบ</Link></main>;
-  return <main style={{maxWidth:1050,margin:'0 auto',padding:'24px 18px',fontFamily:'system-ui, sans-serif',color:'#14263d'}}>
-    <Link href="/">← กลับสู่ ME-SMART</Link>
-    <h1>Learning Applications | แอปพลิเคชันเสริมการเรียนรู้</h1>
-    <p>Fluid Mechanics · Virtual Laboratory</p>
-    <section style={{border:'1px solid #d8e3ef',borderRadius:16,padding:20,background:'#fff'}}>
-      <h2>Couette–Poiseuille Flow</h2>
-      <p>การไหลระหว่างแผ่นขนาน: แผ่นล่างหยุดนิ่ง แผ่นบนเคลื่อนที่ และมีความดันตกคร่อมตามแนวการไหล</p>
-      <p><strong>u(y) = Uy/h + (ΔP/2μL)y(h−y)</strong></p>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:16}}>
-        {([
-          ['ความเร็วแผ่นบน U (m/s)',u,setU,0,1,0.05],
-          ['ช่องว่าง h (mm)',hmm,setHmm,0.5,3,0.1],
-          ['ความหนืด μ (Pa·s)',mu,setMu,0.02,0.5,0.01],
-          ['ความดันตกคร่อม ΔP (Pa)',dp,setDp,-10000,10000,100],
-        ] as const).map(([label,value,set,min,max,step])=><label key={label} style={{display:'grid',gap:8}}>
-          <span>{label}: <strong>{value}</strong></span>
-          <input aria-label={label} type="range" min={min} max={max} step={step} value={value} onChange={e=>set(Number(e.target.value))}/>
-        </label>)}
-      </div>
-      <svg role="img" aria-label="กราฟความเร็วเทียบตำแหน่งระหว่างแผ่นขนาน" viewBox="0 0 700 350" style={{width:'100%',maxHeight:420,marginTop:20,background:'#f4f9fd',borderRadius:12}}>
-        <line x1="80" y1="50" x2="80" y2="290" stroke="#94a3b8" strokeWidth="2"/>
-        <line x1="80" y1="290" x2="620" y2="290" stroke="#94a3b8" strokeWidth="2"/>
-        <line x1={x(0)} y1="50" x2={x(0)} y2="290" stroke="#94a3b8" strokeDasharray="5 5"/>
-        <path d={curve} stroke="#0875b7" strokeWidth="4" fill="none"/>
-        <text x="16" y="35" fontSize="15">y/h</text><text x="550" y="328" fontSize="15">u (m/s)</text>
-        <text x="42" y="55" fontSize="14">1</text><text x="42" y="294" fontSize="14">0</text>
-        <text x="80" y="315" fontSize="13">{minV.toFixed(3)}</text><text x="570" y="315" fontSize="13">{maxV.toFixed(3)}</text>
-      </svg>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:12}}>
-        <p><strong>Q ต่อความกว้าง</strong><br/>{q.toExponential(4)} m²/s</p>
-        <p><strong>แรงเฉือนผนังล่าง</strong><br/>{tauBottom.toFixed(3)} Pa</p>
-        <p><strong>แรงเฉือนผนังบน</strong><br/>{tauTop.toFixed(3)} Pa</p>
-      </div>
-      <button type="button" onClick={()=>{setU(0.4);setHmm(1);setMu(0.1);setDp(100)}} style={{padding:'10px 18px',borderRadius:8,border:'1px solid #b5c9dc',background:'#e8f3fa',cursor:'pointer'}}>คืนค่าเริ่มต้น</button>
-      <p style={{fontSize:13,color:'#52657b'}}>สมมติฐาน: steady, incompressible, Newtonian, fully developed, parallel plates, constant viscosity; L = 0.1 m. ผลลัพธ์เป็นแบบจำลองเชิงวิเคราะห์สำหรับการศึกษา ไม่ใช่ผล CFD</p>
-    </section>
-  </main>;
+type Course={code:string;status?:string};
+const apps=[
+ {id:'fluid-properties',title:'Fluid Properties',thai:'สมบัติของไหล',topic:'พื้นฐาน',detail:'ความหนาแน่น ความหนืด และความถ่วงจำเพาะ',ready:false},
+ {id:'pressure-manometry',title:'Pressure & Manometry',thai:'ความดันและแมนอมิเตอร์',topic:'ความดัน',detail:'ความดันเกจ ความดันสัมบูรณ์ และระดับของเหลว',ready:false},
+ {id:'hydrostatic-pressure',title:'Hydrostatic Pressure',thai:'การกระจายความดันสถิต',topic:'ของไหลสถิต',detail:'ความสัมพันธ์ระหว่างความลึกและความดัน',ready:false},
+ {id:'hydrostatic-forces',title:'Hydrostatic Forces',thai:'แรงดันของเหลวบนพื้นผิว',topic:'ของไหลสถิต',detail:'แรงลัพธ์และจุดศูนย์กลางความดัน',ready:false},
+ {id:'buoyancy',title:'Buoyancy & Stability',thai:'แรงลอยตัวและเสถียรภาพ',topic:'ของไหลสถิต',detail:'การจม การลอย และเสถียรภาพ',ready:false},
+ {id:'continuity',title:'Continuity Equation',thai:'สมการความต่อเนื่อง',topic:'พลศาสตร์ของไหล',detail:'พื้นที่หน้าตัดและความเร็ว',ready:false},
+ {id:'bernoulli',title:'Bernoulli & Energy',thai:'สมการพลังงานของไหล',topic:'พลศาสตร์ของไหล',detail:'ความดัน ความเร็ว และการสูญเสียพลังงาน',ready:false},
+ {id:'pipe-friction',title:'Pipe Friction & Head Loss',thai:'การสูญเสียในท่อ',topic:'การไหลภายใน',detail:'Reynolds number และ Darcy–Weisbach',ready:false},
+ {id:'couette-poiseuille',title:'Couette–Poiseuille Flow',thai:'การไหลระหว่างแผ่นขนาน',topic:'การไหลภายใน',detail:'ปรับความเร็วแผ่น ความหนืด และความดันตกคร่อม',ready:true},
+ {id:'pump-curves',title:'Pump & System Curves',thai:'เส้นโค้งปั๊มและระบบ',topic:'เครื่องจักรของไหล',detail:'จุดทำงานของปั๊มและระบบ',ready:false}
+];
+export default function LearningHub(){
+ const [auth,setAuth]=useState<'loading'|'allowed'|'denied'>('loading');
+ const [search,setSearch]=useState('');
+ const [topic,setTopic]=useState('ทั้งหมด');
+ useEffect(()=>{let active=true;(async()=>{
+   const {data:{user}}=await db().auth.getUser();
+   if(!user){if(active)setAuth('denied');return;}
+   const {data:profile,error}=await db().from('profiles').select('role').eq('id',user.id).single();
+   if(error||!profile){if(active)setAuth('denied');return;}
+   if(profile.role==='teacher'){if(active)setAuth('allowed');return;}
+   if(profile.role!=='student'){if(active)setAuth('denied');return;}
+   const {data:courses,error:courseError}=await db().rpc('my_courses');
+   if(active)setAuth(!courseError&&(courses as Course[]|null)?.some(c=>c.code==='4112203'&&c.status==='approved')?'allowed':'denied');
+ })().catch(()=>{if(active)setAuth('denied')});return()=>{active=false}},[]);
+ const topics=['ทั้งหมด',...Array.from(new Set(apps.map(a=>a.topic)))];
+ const filtered=useMemo(()=>apps.filter(a=>(topic==='ทั้งหมด'||a.topic===topic)&&[a.title,a.thai,a.detail].join(' ').toLowerCase().includes(search.toLowerCase())),[topic,search]);
+ if(auth==='loading')return <main style={{padding:32}}>กำลังตรวจสอบสิทธิ์รายวิชา...</main>;
+ if(auth==='denied')return <main style={{padding:32}}><h1>Learning Applications</h1><p>เฉพาะนักศึกษาที่ได้รับอนุมัติในรายวิชา 4112203 Fluid Mechanics และอาจารย์เท่านั้น</p><Link href="/">กลับสู่ ME-SMART</Link></main>;
+ return <main style={{maxWidth:1100,margin:'0 auto',padding:'28px 18px',fontFamily:'system-ui,sans-serif',color:'#18324c'}}>
+ <Link href="/">← กลับสู่ ME-SMART</Link>
+ <header style={{background:'linear-gradient(120deg,#123c62,#167b91)',color:'white',borderRadius:20,padding:'26px 24px',margin:'20px 0'}}>
+ <p style={{margin:0,opacity:.85}}>ME-SMART · 4112203 Fluid Mechanics</p><h1 style={{margin:'8px 0'}}>Engineering Learning Hub</h1>
+ <p style={{margin:0}}>เลือกบทเรียนและแอปจำลองเพื่อเรียนรู้และทดลองด้วยตนเอง</p></header>
+ <div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'center',marginBottom:20}}>
+ <label htmlFor="app-search">ค้นหาแอป</label><input id="app-search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="ชื่อแอปหรือบทเรียน" style={{flex:'1 1 250px',padding:12,borderRadius:10,border:'1px solid #a9bfd0'}}/>
+ <label htmlFor="topic-select">หมวดบทเรียน</label><select id="topic-select" value={topic} onChange={e=>setTopic(e.target.value)} style={{padding:12,borderRadius:10,border:'1px solid #a9bfd0'}}>{topics.map(t=><option key={t}>{t}</option>)}</select>
+ </div><p aria-live="polite">พบ {filtered.length} แอป · พร้อมทดลอง {filtered.filter(a=>a.ready).length} แอป</p>
+ <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:16}}>
+ {filtered.map(a=><article key={a.id} style={{background:'white',border:'1px solid #d4e3eb',borderRadius:16,padding:20,display:'flex',flexDirection:'column',gap:10}}>
+ <span style={{fontSize:13,color:'#53738a'}}>{a.topic} · {a.ready?'พร้อมทดลอง':'กำลังวางแผน'}</span>
+ <h2 style={{fontSize:19,margin:0}}>{a.title}</h2><strong>{a.thai}</strong><p style={{margin:0,flex:1,color:'#48657a'}}>{a.detail}</p>
+ {a.ready?<Link href="/learning-applications/fluid-mechanics/couette-poiseuille" style={{display:'block',background:'#0b678c',color:'white',textAlign:'center',padding:12,borderRadius:10,textDecoration:'none'}}>เปิดห้องทดลอง →</Link>:<span style={{padding:12,background:'#f0f4f7',color:'#657988',borderRadius:10,textAlign:'center'}}>ยังไม่เปิดใช้งาน</span>}
+ </article>)}</div>
+ {filtered.length===0&&<p>ไม่พบแอปที่ตรงกับคำค้นหา</p>}
+ <p style={{fontSize:13,color:'#657988',marginTop:24}}>แอปที่ยังไม่พร้อมเป็นแผนพัฒนา ไม่มีการบันทึกคะแนนหรือส่งงานในรุ่นนี้</p>
+ </main>
 }
