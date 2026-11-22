@@ -20,6 +20,7 @@ export default function PressureManometry(){
   const ok=!courseError&&(courses??[]).some((c:{code:string;status?:string})=>c.code==='4112203'&&c.status==='approved');
   if(active)setAccess(ok?'allowed':'denied');
  })().catch(()=>{if(active)setAccess('denied')});return()=>{active=false}},[]);
+ useEffect(()=>{if(access!=='allowed')return;void db().rpc('record_learning_app_visit',{p_app_id:'pressure-manometry'}).then(({error})=>{if(error)console.warn('Visit tracking unavailable',error.message)});},[access]);
  const gauge=rho*g*depth;
  const absolute=atmos+gauge;
  if(access==='loading')return <main style={{padding:32}}>กำลังตรวจสอบสิทธิ์...</main>;
