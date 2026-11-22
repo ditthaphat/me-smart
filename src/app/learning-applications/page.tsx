@@ -22,6 +22,8 @@ export default function LearningHub(){
  const [search,setSearch]=useState('');
  const [topic,setTopic]=useState('ทั้งหมด');
  const [availability,setAvailability]=useState<'all'|'ready'>('all');
+ const [visits,setVisits]=useState<Record<string,{count:number;users:number}>>({});
+ const [visitError,setVisitError]=useState(false);
  useEffect(()=>{let active=true;(async()=>{
    const {data:{user}}=await db().auth.getUser();
    if(!user){if(active)setAuth('denied');return;}
@@ -34,6 +36,7 @@ export default function LearningHub(){
  })().catch(()=>{if(active)setAuth('denied')});return()=>{active=false}},[]);
  const topics=['ทั้งหมด',...Array.from(new Set(apps.map(a=>a.topic)))];
  const filtered=useMemo(()=>apps.filter(a=>(topic==='ทั้งหมด'||a.topic===topic)&&(availability==='all'||a.ready)&&[a.title,a.thai,a.detail].join(' ').toLowerCase().includes(search.toLowerCase())),[topic,search,availability]);
+ useEffect(()=>{if(auth!=='allowed')return;let active=true;db().rpc('learning_app_visit_stats').then(({data,error})=>{if(!active)return;if(error){setVisitError(true);return;}const next:Record<string,{count:number;users:number}>={};for(const row of data??[]){next[row.app_id]={count:Number(row.visit_count),users:Number(row.unique_users)}}setVisits(next);setVisitError(false)});return()=>{active=false}},[auth]);
  if(auth==='loading')return <main style={{padding:32}}>กำลังตรวจสอบสิทธิ์รายวิชา...</main>;
  if(auth==='denied')return <main style={{padding:32}}><h1>Learning Applications</h1><p>เฉพาะนักศึกษาที่ได้รับอนุมัติในรายวิชา 4112203 Fluid Mechanics และอาจารย์เท่านั้น</p><Link href="/">กลับสู่ ME-SMART</Link></main>;
  const symbols:Record<string,string>={'fluid-properties':'💧','pressure-manometry':'📏','hydrostatic-pressure':'🌊','hydrostatic-forces':'🚪','buoyancy':'⚓','continuity':'🔀','bernoulli':'📉','pipe-friction':'🧪','couette-poiseuille':'〰️','pump-curves':'⚙️'};
@@ -42,13 +45,13 @@ export default function LearningHub(){
  const renderCard=(a:typeof apps[number],index:number)=><article key={a.id} className={styles.card}>
    <div className={styles.cardTop}><span className={styles.symbol} aria-hidden="true">{symbols[a.id]}</span><span className={a.ready?styles.status:`${styles.status} ${styles.pending}`}>{a.ready?'● พร้อมทดลอง':'○ อยู่ในแผนพัฒนา'}</span></div>
    <span className={styles.topic}>บทเรียน {String(apps.indexOf(a)+1).padStart(2,'0')} · {a.topic}</span>
-   <h3>{a.title}</h3><span className={styles.thai}>{a.thai}</span><p className={styles.desc}>{a.detail}</p>
+   <h3>{a.title}</h3>{a.ready&&<span className={styles.topic}>{visitError?'สถิติการใช้งานยังไม่พร้อม':`เปิดใช้งาน ${(visits[a.id]?.count??0).toLocaleString('th-TH')} ครั้ง · ผู้ใช้ ${(visits[a.id]?.users??0).toLocaleString('th-TH')} คน`}</span>}<span className={styles.thai}>{a.thai}</span><p className={styles.desc}>{a.detail}</p>
    {a.ready?<Link className={styles.launch} href={a.id==='pressure-manometry'?'/learning-applications/fluid-mechanics/pressure-manometry':'/learning-applications/fluid-mechanics/couette-poiseuille'}>เปิดห้องทดลอง →</Link>:<span className={styles.disabled}>ยังไม่เปิดใช้งาน</span>}
  </article>;
  return <main className={styles.shell}>
  <Link className={styles.back} href="/">← กลับสู่ ME-SMART</Link>
  <header className={styles.hero}><div className={styles.eyebrow}>ME-SMART · 4112203 Fluid Mechanics</div><h1>Engineering Learning Hub</h1><p>ห้องปฏิบัติการเสมือนจริงสำหรับนักศึกษาวิศวกรรมเครื่องกล เลือกบทเรียน ทดลองปรับตัวแปร และศึกษาผลลัพธ์ด้วยตนเอง</p></header>
- <div className={styles.stats}><div className={styles.stat}><strong>{apps.length}</strong><span>แอปทั้งหมด</span></div><div className={styles.stat}><strong>{apps.filter(a=>a.ready).length}</strong><span>พร้อมทดลอง</span></div><div className={styles.stat}><strong>{apps.filter(a=>!a.ready).length}</strong><span>อยู่ในแผนพัฒนา</span></div></div>
+ <div className={styles.stats}><div className={styles.stat}><strong>{apps.length}</strong><span>แอปทั้งหมด</span></div><div className={styles.stat}><strong>{apps.filter(a=>a.ready).length}</strong><span>พร้อมทดลอง</span></div><div className={styles.stat}><strong>{apps.filter(a=>!a.ready).length}</strong><span>อยู่ในแผนพัฒนา</span></div><div className={styles.stat}><strong>{visitError?'—':Object.values(visits).reduce((n,v)=>n+v.count,0).toLocaleString('th-TH')}</strong><span>ครั้งที่เปิดใช้งานรวม</span></div></div>
  <div className={styles.toolbar}><label className={styles.field} htmlFor="app-search">ค้นหาแอป<input id="app-search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="ค้นหาชื่อแอปหรือหัวข้อบทเรียน"/></label><label className={styles.field} htmlFor="topic-select">หมวดบทเรียน<select id="topic-select" value={topic} onChange={e=>setTopic(e.target.value)}>{topics.map(t=><option key={t}>{t}</option>)}</select></label></div>
  <div className={styles.topicTabs} aria-label="สถานะแอป"><button type="button" className={availability==='all'?`${styles.tab} ${styles.tabActive}`:styles.tab} onClick={()=>setAvailability('all')}>ทั้งหมด ({apps.length})</button><button type="button" className={availability==='ready'?`${styles.tab} ${styles.tabActive}`:styles.tab} onClick={()=>setAvailability('ready')}>พร้อมทดลอง ({apps.filter(a=>a.ready).length})</button></div>
  <p aria-live="polite">พบ {filtered.length} แอป · พร้อมทดลอง {readyApps.length} แอป</p>
