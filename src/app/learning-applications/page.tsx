@@ -18,11 +18,13 @@ export default function LearningApplications() {
       if (profileError || !profile) { if(active) setAuth('denied'); return; }
       if (profile.role === 'teacher') { if(active) setAuth('allowed'); return; }
       if (profile.role !== 'student') { if(active) setAuth('denied'); return; }
-      const {data: fluidCourses, error: courseError} = await db().from('courses').select('id').eq('code','4112203');
-      if (courseError || !fluidCourses?.length) { if(active) setAuth('denied'); return; }
-      const courseIds = fluidCourses.map(course => course.id);
-      const {data: enrollment, error: enrollmentError} = await db().from('enrollments').select('course_id').eq('student_id',data.user.id).eq('status','approved').in('course_id',courseIds).limit(1);
-      if(active) setAuth(!enrollmentError && (enrollment?.length ?? 0)>0 ? 'allowed':'denied');
+      // Reuse the same student-visible course source as the ME-SMART dashboard.
+      // Direct courses/enrollments SELECTs may be restricted by RLS.
+      const {data: myCourses, error: courseError} = await db().rpc('my_courses');
+      if (courseError) { if(active) setAuth('denied'); return; }
+      const eligible = (myCourses ?? []).some((course: {code:string;status?:string}) =>
+        course.code === '4112203' && course.status === 'approved');
+      if(active) setAuth(eligible ? 'allowed':'denied');
     })
       .catch(() => {if(active) setAuth('denied');});
     return () => {active = false;};
