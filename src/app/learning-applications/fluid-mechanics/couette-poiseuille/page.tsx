@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { db } from '../../lib/supabase';
+import { db } from '../../../../lib/supabase';
 
 export default function CouettePoiseuilleLab() {
   const [auth, setAuth] = useState<'loading'|'allowed'|'denied'>('loading');
