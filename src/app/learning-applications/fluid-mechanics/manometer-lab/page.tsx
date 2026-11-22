@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useState} from 'react';
 import Link from 'next/link';
+import AdditionalManometers from './AdditionalManometers';
 import {db} from '../../../../lib/supabase';
 
 type Kind='utube'|'differential'|'inclined'|'barometer';
@@ -50,6 +51,7 @@ export default function ManometerLab(){
  </div>{!valid&&<p role="alert" style={{color:'#b42318'}}>ข้อมูลไม่ถูกต้อง: ค่าความหนาแน่นและความสูงต้องไม่ติดลบ มุมต้องอยู่ระหว่าง 0–90° และสำหรับ Differential ต้องมี ρm มากกว่า ρf และ PB ไม่ติดลบ</p>}
  </section>
  <section style={box}><h2>Answer Verification · ตรวจคำตอบนักศึกษา</h2><p>กรอกคำตอบในหน่วย {unit} ก่อนเปิดวิธีทำ (เกณฑ์ตัวอย่าง ±1%)</p><div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'end'}}><label style={{flex:'1 1 250px'}}><strong>คำตอบที่คำนวณเอง</strong><input style={input} type="number" step="any" value={answer} onChange={e=>setAnswer(e.target.value)}/></label><button type="button" onClick={()=>setShow(v=>!v)} style={{padding:12,background:'#0c6c7d',color:'white',border:0,borderRadius:9,cursor:'pointer'}}>{show?'ซ่อนวิธีทำ':'แสดงวิธีทำทีละขั้น'}</button></div>{err!==null&&<p aria-live="polite" style={{color:err<=1?'#087852':'#a34b16'}}>คลาดเคลื่อน {format(err)}% — {err<=1?'ผ่านเกณฑ์':'โปรดตรวจสมการและหน่วย'}</p>}{show&&valid&&<div style={{background:'#eef7fa',padding:15,marginTop:12,borderRadius:9}}><strong>วิธีทำ</strong>{kind==='utube'&&<p>Pg = ρmgh = {format(rhoM)} × 9.81 × {format(h)} / 1000 = {format(delta)} kPa; Pabs = Patm + Pg = {format(patm)} + {format(delta)} = {format(result)} kPa</p>}{kind==='differential'&&<p>PA − PB = (ρm − ρf)gh = ({format(rhoM)} − {format(rhoF)}) × 9.81 × {format(h)} / 1000 = {format(delta)} kPa; PB = PA − ΔP = {format(pa)} − {format(delta)} = {format(result)} kPa</p>}{kind==='inclined'&&<p>Δz = Lsinθ = {format(h)} sin({format(incline)}°) = {format(dh)} m; Pg = ρmgΔz = {format(rhoM)} × 9.81 × {format(dh)} / 1000 = {format(result)} kPa</p>}{kind==='barometer'&&<p>Patm ≈ ρmgh = {format(rhoM)} × 9.81 × {format(hb)} / 1000 = {format(result)} kPa (สมมติสุญญากาศด้านบน)</p>}</div>}</section>
+ <AdditionalManometers/>
  <footer style={{...box,fontSize:14}}><strong>ข้อจำกัดและเอกสารอ้างอิง</strong><p>สมมติของไหลหยุดนิ่ง ความหนาแน่นคงที่ ไม่พิจารณา capillarity และความดันไอใน Barometer; กราฟิกเป็นแผนภาพเชิงแนวคิด ไม่ใช่รูปทรงตามสเกลจริง ค่า ρ เริ่มต้นเป็นตัวอย่างสำหรับฝึกโจทย์ ควรตรวจสอบจากตารางสมบัติของไหลที่อุณหภูมิใช้งาน</p><p>Çengel, Y. A., &amp; Cimbala, J. M. (2020). <em>Fluid mechanics: Fundamentals and applications</em>. McGraw-Hill Education. Chapter 3.</p><Link href="/learning-applications/fluid-mechanics/fluid-properties">เปิด Fluid Properties Calculator →</Link></footer>
  </main>;
 }
