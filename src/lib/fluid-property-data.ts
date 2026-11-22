@@ -1,7 +1,7 @@
 // Verified sample rows transcribed from the instructor's Fluid Property Tables(1).pdf.
 // A-3 printed p.950; A-7 p.954; A-9 p.956; A-10 p.957.
 // Only listed rows are available. Do not extrapolate or imply full table coverage.
-export type PropertyRow={t:number;rho:number;mu:number;cp?:number;k?:number;nu?:number;pr?:number};
+export type PropertyRow={t:number;rho:number;mu:number;cp?:number;k?:number;nu?:number;pr?:number;alpha?:number;beta?:number};
 export type FluidTable={id:string;name:string;table:string;condition:string;rows:PropertyRow[]};
 export const fluidTables:FluidTable[]=[
  {id:'water',name:'Saturated water (liquid)',table:'A–3 · p.950',condition:'Saturated liquid; pressure equals saturation pressure at temperature',rows:[
@@ -73,12 +73,12 @@ export const fluidTables:FluidTable[]=[
  {t:2000,rho:.1553,mu:6.630e-5,cp:1264,k:.11113,nu:4.270e-4,pr:.7539}
  ]},
  {id:'methanol',name:'Methanol (liquid)',table:'A–7 · p.954',condition:'Liquid in tabulated temperature range',rows:[
- {t:20,rho:788.4,mu:5.857e-4,cp:2515,k:.1987,nu:7.429e-7,pr:7.414},
- {t:30,rho:779.1,mu:5.088e-4,cp:2577,k:.1980,nu:6.531e-7,pr:6.622},
- {t:40,rho:769.6,mu:4.460e-4,cp:2644,k:.1972,nu:5.795e-7,pr:5.980},
- {t:50,rho:760.1,mu:3.942e-4,cp:2718,k:.1965,nu:5.185e-7,pr:5.453},
- {t:60,rho:750.4,mu:3.510e-4,cp:2798,k:.1957,nu:4.677e-7,pr:5.018},
- {t:70,rho:740.4,mu:3.146e-4,cp:2885,k:.1950,nu:4.250e-7,pr:4.655}
+ {t:20,rho:788.4,mu:5.857e-4,cp:2515,k:.1987,nu:7.429e-7,pr:7.414,alpha:1.002e-7,beta:.00118},
+ {t:30,rho:779.1,mu:5.088e-4,cp:2577,k:.1980,nu:6.531e-7,pr:6.622,alpha:9.862e-8,beta:.00120},
+ {t:40,rho:769.6,mu:4.460e-4,cp:2644,k:.1972,nu:5.795e-7,pr:5.980,alpha:9.690e-8,beta:.00123},
+ {t:50,rho:760.1,mu:3.942e-4,cp:2718,k:.1965,nu:5.185e-7,pr:5.453,alpha:9.509e-8,beta:.00127},
+ {t:60,rho:750.4,mu:3.510e-4,cp:2798,k:.1957,nu:4.677e-7,pr:5.018,alpha:9.320e-8,beta:.00132},
+ {t:70,rho:740.4,mu:3.146e-4,cp:2885,k:.1950,nu:4.250e-7,pr:4.655,alpha:9.128e-8,beta:.00137}
  ]},
  {id:'co2',name:'Carbon dioxide (CO₂)',table:'A–10 · p.957',condition:'1 atm',rows:[
  {t:-50,rho:2.4035,mu:1.129e-5,cp:746,k:.01051,nu:4.699e-6,pr:.8019},
