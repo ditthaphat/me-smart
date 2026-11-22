@@ -6,7 +6,7 @@ import styles from './learning-hub.module.css';
 
 type Course={code:string;status?:string};
 const apps=[
- {id:'fluid-properties',title:'Fluid Properties',thai:'สมบัติของไหล',topic:'พื้นฐาน',detail:'ความหนาแน่น ความหนืด และความถ่วงจำเพาะ',ready:false},
+ {id:'fluid-properties',title:'Fluid Properties',thai:'สมบัติของไหล',topic:'พื้นฐาน',detail:'ตรวจคำตอบจากตาราง A–3, A–7, A–9, A–10 (ข้อมูลบางช่วงที่ตรวจสอบแล้ว)',ready:true},
  {id:'pressure-manometry',title:'Pressure & Manometry',thai:'ความดันและแมนอมิเตอร์',topic:'ความดัน',detail:'ทดลองความดันเกจ ความดันสัมบูรณ์ และเฮดความดัน (แมนอมิเตอร์หลายของเหลวอยู่ระหว่างพัฒนา)',ready:true},
  {id:'hydrostatic-pressure',title:'Hydrostatic Pressure',thai:'การกระจายความดันสถิต',topic:'ของไหลสถิต',detail:'ความสัมพันธ์ระหว่างความลึกและความดัน',ready:false},
  {id:'hydrostatic-forces',title:'Hydrostatic Forces',thai:'แรงดันของเหลวบนพื้นผิว',topic:'ของไหลสถิต',detail:'แรงลัพธ์และจุดศูนย์กลางความดัน',ready:false},
@@ -46,7 +46,7 @@ export default function LearningHub(){
    <div className={styles.cardTop}><span className={styles.symbol} aria-hidden="true">{symbols[a.id]}</span><span className={a.ready?styles.status:`${styles.status} ${styles.pending}`}>{a.ready?'● พร้อมทดลอง':'○ อยู่ในแผนพัฒนา'}</span></div>
    <span className={styles.topic}>บทเรียน {String(apps.indexOf(a)+1).padStart(2,'0')} · {a.topic}</span>
    <h3>{a.title}</h3>{a.ready&&<span className={styles.topic}>{visitError?'สถิติการใช้งานยังไม่พร้อม':`เปิดใช้งาน ${(visits[a.id]?.count??0).toLocaleString('th-TH')} ครั้ง · ผู้ใช้ ${(visits[a.id]?.users??0).toLocaleString('th-TH')} คน`}</span>}<span className={styles.thai}>{a.thai}</span><p className={styles.desc}>{a.detail}</p>
-   {a.ready?<Link className={styles.launch} href={a.id==='pressure-manometry'?'/learning-applications/fluid-mechanics/pressure-manometry':'/learning-applications/fluid-mechanics/couette-poiseuille'}>เปิดห้องทดลอง →</Link>:<span className={styles.disabled}>ยังไม่เปิดใช้งาน</span>}
+   {a.ready?<Link className={styles.launch} href={a.id==='fluid-properties'?'/learning-applications/fluid-mechanics/fluid-properties':a.id==='pressure-manometry'?'/learning-applications/fluid-mechanics/pressure-manometry':'/learning-applications/fluid-mechanics/couette-poiseuille'}>เปิดห้องทดลอง →</Link>:<span className={styles.disabled}>ยังไม่เปิดใช้งาน</span>}
  </article>;
  return <main className={styles.shell}>
  <Link className={styles.back} href="/">← กลับสู่ ME-SMART</Link>
