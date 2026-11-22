@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const lab = fs.readFileSync(path.join(__dirname,'../src/app/learning-applications/page.tsx'),'utf8');
+const labDetail = fs.readFileSync(path.join(__dirname,'../src/app/learning-applications/fluid-mechanics/couette-poiseuille/page.tsx'),'utf8');
 const home = fs.readFileSync(path.join(__dirname,'../src/app/page.tsx'),'utf8');
 
 test('Fluid Mechanics lab uses student-visible my_courses RPC and approved 4112203 enrollment',()=>{
@@ -16,6 +17,15 @@ test('Fluid Mechanics lab uses student-visible my_courses RPC and approved 41122
 test('Student navigation only exposes Fluid Mechanics entry in approved 4112203 course card',()=>{
   assert.match(home,/profile\.role === 'student' && c\.status === 'approved'/);
   assert.match(home,/c\.code === "4112203" && <Link href="\/learning-applications"/);
+});
+test('Learning Hub lists topic cards and routes only ready app to lab',()=>{
+ assert.match(lab,/Engineering Learning Hub/);
+ assert.match(lab,/hydrostatic-forces/);
+ assert.match(lab,/pressure-manometry/);
+ assert.match(lab,/href="\/learning-applications\/fluid-mechanics\/couette-poiseuille"/);
+ assert.match(lab,/a\.ready\?/);
+ assert.match(labDetail,/\.rpc\('my_courses'\)/);
+ assert.match(labDetail,/course\.code === '4112203' && course\.status === 'approved'/);
 });
 test('Couette-Poiseuille reference cases: pure Couette, pure Poiseuille, reverse pressure',()=>{
   const u=(y,U,h,mu,dp,L)=>U*y/h + dp*y*(h-y)/(2*mu*L);
