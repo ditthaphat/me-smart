@@ -101,6 +101,6 @@ export function lookup(rows:PropertyRow[],temperature:number){
  const upperIndex=rows.findIndex(r=>r.t>temperature);const lower=rows[upperIndex-1],upper=rows[upperIndex];
  const fraction=(temperature-lower.t)/(upper.t-lower.t);
  const row:PropertyRow={t:temperature,rho:lower.rho+(upper.rho-lower.rho)*fraction,mu:lower.mu+(upper.mu-lower.mu)*fraction};
- for(const key of ['cp','k','nu','pr'] as const){if(lower[key]!==undefined&&upper[key]!==undefined)row[key]=lower[key]!+(upper[key]!-lower[key]!)*fraction;}
+ for(const key of ['cp','k','nu','pr','alpha','beta'] as const){if(lower[key]!==undefined&&upper[key]!==undefined)row[key]=lower[key]!+(upper[key]!-lower[key]!)*fraction;}
  return {row,lower,upper,interpolated:true};
 }
