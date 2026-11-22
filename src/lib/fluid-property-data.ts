@@ -78,6 +78,15 @@ export const fluidTables:FluidTable[]=[
 {t:140,rho:816.8,cp:2395,k:0.133,alpha:6.798e-8,mu:0.006558,nu:0.000008029,pr:118.1,beta:0.0007},
 {t:150,rho:810.3,cp:2441,k:0.1327,alpha:6.708e-8,mu:0.005344,nu:0.000006595,pr:98.31,beta:0.0007}
 ]},
+ {id:'mercury',name:'Mercury (Hg) — liquid metal',table:'A–8 · p.955',condition:'Liquid mercury; melting point −39°C',rows:[{t:0,rho:13595,cp:140.4,k:8.18200,alpha:4.287e-6,mu:1.687e-3,nu:1.241e-7,pr:.0289,beta:1.810e-4},
+{t:25,rho:13534,cp:139.4,k:8.51533,alpha:4.514e-6,mu:1.534e-3,nu:1.133e-7,pr:.0251,beta:1.810e-4},
+{t:50,rho:13473,cp:138.6,k:8.83632,alpha:4.734e-6,mu:1.423e-3,nu:1.056e-7,pr:.0223,beta:1.810e-4},
+{t:75,rho:13412,cp:137.8,k:9.15632,alpha:4.956e-6,mu:1.316e-3,nu:9.819e-8,pr:.0198,beta:1.810e-4},
+{t:100,rho:13351,cp:137.1,k:9.46706,alpha:5.170e-6,mu:1.245e-3,nu:9.326e-8,pr:.0180,beta:1.810e-4},
+{t:150,rho:13231,cp:136.1,k:10.07780,alpha:5.595e-6,mu:1.126e-3,nu:8.514e-8,pr:.0152,beta:1.810e-4},
+{t:200,rho:13112,cp:135.5,k:10.65465,alpha:5.996e-6,mu:1.043e-3,nu:7.959e-8,pr:.0133,beta:1.815e-4},
+{t:250,rho:12993,cp:135.3,k:11.18150,alpha:6.363e-6,mu:9.820e-4,nu:7.558e-8,pr:.0119,beta:1.829e-4},
+{t:300,rho:12873,cp:135.3,k:11.68150,alpha:6.705e-6,mu:9.336e-4,nu:7.252e-8,pr:.0108,beta:1.854e-4}]},
  {id:'air',name:'Air',table:'A–9 · p.956',condition:'1 atm',rows:[
  {t:-150,rho:2.866,mu:8.636e-6,cp:983,k:.01171,nu:3.013e-6,pr:.7246},
  {t:-50,rho:1.582,mu:1.474e-5,cp:999,k:.01979,nu:9.319e-6,pr:.7440},
