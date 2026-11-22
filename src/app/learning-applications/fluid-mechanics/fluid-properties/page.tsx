@@ -3,11 +3,13 @@ import {useEffect,useMemo,useState} from 'react';
 import Link from 'next/link';
 import {db} from '../../../../lib/supabase';
 import {fluidTables,lookup} from '../../../../lib/fluid-property-data';
+import {lookupWaterSupplement} from '../../../../lib/saturated-water-supplement';
 export default function FluidPropertiesCalculator(){
  const [access,setAccess]=useState<'loading'|'allowed'|'denied'>('loading');
  const [id,setId]=useState('water'),[temp,setTemp]=useState('25');
  const table=fluidTables.find(t=>t.id===id)!;
  const temperature=Number(temp);
+ const waterExtra=id==='water'&&temp.trim()!==''?lookupWaterSupplement(temperature):null;
  const result=useMemo(()=>temp.trim()===''?null:lookup(table.rows,temperature),[table,temperature,temp]);
  useEffect(()=>{let active=true;(async()=>{
  const {data:{user}}=await db().auth.getUser();
@@ -65,6 +67,6 @@ export default function FluidPropertiesCalculator(){
  {result.interpolated&&<div style={{marginTop:18,padding:16,background:'#f3f5f8',borderRadius:12}}><strong>วิธีคำนวณ</strong><p>ใช้แถวที่ T₁ = {result.lower.t} °C และ T₂ = {result.upper.t} °C</p><p>X(T) = X₁ + [(T − T₁)/(T₂ − T₁)] × (X₂ − X₁)</p><p>ตัวอย่าง Density: {format(result.lower.rho)} + [({temperature} − {result.lower.t})/({result.upper.t} − {result.lower.t})] × ({format(result.upper.rho)} − {format(result.lower.rho)}) = <strong>{format(result.row.rho)} kg/m³</strong></p></div>}
  </>}
  <p style={{fontSize:13,color:'#687d8d',marginTop:18}}>หมายเหตุ: ขณะนี้เป็นข้อมูลที่ถอดและตรวจสอบเฉพาะบางแถวจาก PDF ต้นฉบับ ยังไม่ครอบคลุมทุกสารและทุกอุณหภูมิ ค่า ν จะแสดงเฉพาะเมื่อมีข้อมูลในตารางนั้น ไม่ใช้ค่าคำนวณแทนโดยไม่ระบุ</p>
- {id==='water'&&<section style={{marginTop:18,padding:16,background:'#fff8e9',borderRadius:12}}><strong>คอลัมน์เพิ่มเติมจากตาราง A–3</strong><p>ต้นฉบับมีค่า Psat, ρg, hfg, cp,g, kg, μg, Prg, β และ σ ด้วย แต่ข้อมูลเหล่านี้ยังไม่ได้บันทึกครบทุกแถว จึงไม่แสดงตัวเลขที่ไม่มีหลักฐาน</p><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))',gap:8}}>{waterAdditional.map(f=><div key={f.key} style={{padding:10,border:'1px solid #e8d5a5',borderRadius:8}}><strong>{f.label}</strong><div>{f.unit} · รอนำเข้าข้อมูล</div></div>)}</div></section>}
+ {id==='water'&&<section style={{marginTop:18,padding:16,background:'#fff8e9',borderRadius:12}}><strong>คอลัมน์เพิ่มเติมจากตาราง A–3</strong><p>ต้นฉบับมีค่า Psat, ρg, hfg, cp,g, kg, μg, Prg, β และ σ ด้วย แสดงค่าตามตารางต้นฉบับและคำนวณ Interpolation เมื่อมีข้อมูลสองแถวรองรับ; ช่องว่างในต้นฉบับจะไม่ถูกเติมด้วยค่าคาดเดา</p><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))',gap:8}}>{waterAdditional.map(f=><div key={f.key} style={{padding:10,border:'1px solid #e8d5a5',borderRadius:8}}><strong>{f.label}</strong><div>{f.unit} · รอนำเข้าข้อมูล</div></div>)}</div></section>}
  </section><section style={{marginTop:22,padding:20,background:'white',border:'1px solid #c9dce5',borderRadius:14}}><h2>สารบัญตารางสมบัติของไหล A–1 ถึง A–11</h2><p>แสดงเฉพาะตารางสมบัติของไหล ไม่รวม Moody Chart และตารางการไหลอัดตัวได้ เครื่องคำนวณด้านบนยังรองรับข้อมูลเชิงตัวเลขเฉพาะบางตารางเท่านั้น ตารางอื่นต้องตรวจสอบและนำเข้าข้อมูลก่อนเปิดใช้คำนวณ</p><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:10}}>{catalog.map(([id,title,page,thai])=><div key={id} style={{border:'1px solid #d9e4ec',borderRadius:10,padding:12}}><strong>{id} · หน้า {page}</strong><div>{title}</div><small>{thai}</small><div style={{fontSize:12,color:'#6c7d8a'}}>{['A–3','A–7','A–9','A–10'].includes(id)?'มีข้อมูลคำนวณบางช่วง':'ยังไม่มีข้อมูลคำนวณที่ตรวจสอบแล้ว'}</div></div>)}</div></section></main>;
 }
