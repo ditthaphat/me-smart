@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { userMessage } from '../lib/messages';
 import { db } from '../lib/supabase';
 import { sortStudentsByNumber } from '../lib/student-sort';
@@ -32,6 +33,7 @@ const teacherTabs = [
   { id: 'research', label: 'งานวิจัย', icon: '⚗' },
   { id: 'materials', label: 'เอกสารการสอน', icon: '▧' },
   { id: 'planner', label: 'งาน / ปฏิทิน', icon: '▦' },
+  { id: 'learning', label: 'แอปเสริมการเรียน', icon: '◈' },
 ] as const;
 type TeacherTab = (typeof teacherTabs)[number]['id'];
 
@@ -379,6 +381,7 @@ export default function Home() {
           <div id="teacher-panel-materials" role="tabpanel" aria-labelledby="teacher-tab-materials" hidden={teacherTab !== 'materials'}>
             {materialsVisited && <MaterialsPanel teacherId={profile.id} active={teacherTab === 'materials'} />}
           </div>
+          <div id="teacher-panel-learning" role="tabpanel" aria-labelledby="teacher-tab-learning" hidden={teacherTab !== 'learning'}><section className={styles.card}><h2>Learning Applications | แอปพลิเคชันเสริมการเรียนรู้</h2><p>ทดลองแบบจำลอง Couette–Poiseuille Flow พร้อมกราฟและการคำนวณแบบโต้ตอบ</p><Link href="/learning-applications" className={styles.secondaryButton}>เปิดห้องทดลอง Fluid Mechanics →</Link></section></div>
           {futureTeacherAreas.map(area => <div key={area.id} id={`teacher-panel-${area.id}`} role="tabpanel" aria-labelledby={`teacher-tab-${area.id}`} hidden={teacherTab !== area.id}>
             <section className={`${styles.card} ${styles.futureCard}`}>
               <span className={styles.futureBadge}>กำลังพัฒนา</span>
@@ -439,6 +442,7 @@ export default function Home() {
             <h3>{c.code} — {c.title}</h3><p className={styles.muted}>ภาคเรียน {c.term}</p>
             {profile.role === 'teacher' && <button type="button" className={styles.secondaryButton} disabled={membersLoading} onClick={() => void openCourse(c.id)}>จัดการรายวิชา →</button>}
             {profile.role === 'student' && c.status === 'approved' && <div className={styles.actions}>
+              {c.code === "4112203" && <Link href="/learning-applications" className={styles.secondaryButton}>แอป Fluid Mechanics →</Link>}
               <button type="button" className={styles.secondaryButton} aria-expanded={studentGradeCourseId===c.id} aria-controls={studentGradeCourseId===c.id?'student-gradebook':undefined} onClick={()=>{setStudentMaterialCourseId(null);setStudentGradeCourseId(current=>current===c.id?null:c.id);}}>{studentGradeCourseId===c.id?'ปิดตารางคะแนน':'ดูคะแนนของฉัน →'}</button>
               <button type="button" className={styles.secondaryButton} aria-expanded={studentMaterialCourseId===c.id} aria-controls={studentMaterialCourseId===c.id?'student-materials':undefined} onClick={()=>{setStudentGradeCourseId(null);setStudentMaterialCourseId(current=>current===c.id?null:c.id);}}>{studentMaterialCourseId===c.id?'ปิดเอกสาร':'เอกสารรายวิชานี้ →'}</button>
             </div>}
