@@ -5,14 +5,13 @@ const path = require('node:path');
 const lab = fs.readFileSync(path.join(__dirname,'../src/app/learning-applications/page.tsx'),'utf8');
 const home = fs.readFileSync(path.join(__dirname,'../src/app/page.tsx'),'utf8');
 
-test('Fluid Mechanics lab is restricted to approved enrollment in course 4112203',()=>{
-  assert.match(lab,/\.eq\('code','4112203'\)/);
-  assert.match(lab,/\.eq\('student_id',data\.user\.id\)/);
-  assert.match(lab,/\.eq\('status','approved'\)/);
-  assert.match(lab,/\.in\('course_id',courseIds\)/);
+test('Fluid Mechanics lab uses student-visible my_courses RPC and approved 4112203 enrollment',()=>{
+  assert.match(lab,/\.rpc\('my_courses'\)/);
+  assert.match(lab,/course\.code === '4112203' && course\.status === 'approved'/);
   assert.match(lab,/if \(profile\.role === 'teacher'\)/);
   assert.match(lab,/if \(profile\.role !== 'student'\)/);
-  assert.match(lab,/setAuth\(!enrollmentError && \(enrollment\?\.length \?\? 0\)>0 \? 'allowed':'denied'\)/);
+  assert.match(lab,/if \(courseError\)/);
+  assert.match(lab,/setAuth\(eligible \? 'allowed':'denied'\)/);
 });
 test('Student navigation only exposes Fluid Mechanics entry in approved 4112203 course card',()=>{
   assert.match(home,/profile\.role === 'student' && c\.status === 'approved'/);
