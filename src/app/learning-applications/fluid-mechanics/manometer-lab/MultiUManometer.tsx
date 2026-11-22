@@ -63,7 +63,7 @@ export default function MultiUManometer(){
  <div style={{overflowX:'auto',marginTop:18,padding:12,background:'#f8fcfd',borderRadius:12}}>
  <svg viewBox={`0 0 ${W} ${H}`} style={{display:'block',width:'100%',minWidth:Math.max(450,W),maxWidth:1000}} role="img" aria-label={`ภาพท่อ U ${count} ชุดต่อเนื่องกัน แสดงของไหลและระดับรอยต่อซ้ายขวาตามข้อมูลที่กรอก`}>
  {selected.map((_,i)=>tube(i))}
- <path d="M18 55 H72" stroke="#426c82" strokeWidth="26"/><path d="M18 55 H72" stroke={fluid(carrier).color} strokeWidth="18"/><path d={\`M\${72+(count-1)*182+118} 55 H\${W-18}\`} stroke="#426c82" strokeWidth="26"/><path d={\`M\${72+(count-1)*182+118} 55 H\${W-18}\`} stroke={fluid(carrier).color} strokeWidth="18"/><text x="12" y="26" fontSize="16" fontWeight="bold">A</text><text x={W-26} y="26" fontSize="16" fontWeight="bold">B</text>
+ <path d="M18 55 H72" stroke="#426c82" strokeWidth="26"/><path d="M18 55 H72" stroke={fluid(carrier).color} strokeWidth="18"/><path d={`M${72+(count-1)*182+118} 55 H${W-18}`} stroke="#426c82" strokeWidth="26"/><path d={`M${72+(count-1)*182+118} 55 H${W-18}`} stroke={fluid(carrier).color} strokeWidth="18"/><text x="12" y="26" fontSize="16" fontWeight="bold">A</text><text x={W-26} y="26" fontSize="16" fontWeight="bold">B</text>
  <text x="15" y="328" fontSize="12">z = 0 ที่ระดับเริ่มโค้ง (เส้นอ้างอิงแนวดิ่ง) · ระดับรอยต่อแสดงตามสัดส่วน H</text>
  </svg></div>
  <p style={{fontSize:13}}>ปลาย A และ B เป็นจุดต่อท่อที่ระดับเดียวกัน; เส้นสีด้านบนคือของไหลหลัก ส่วนโค้งแต่ละ U เป็นของไหลที่เลือก · ภาพแสดงระดับรอยต่อของไหลตามค่าที่ป้อนจริงบนแกนความสูงร่วมกัน สีแยกชนิดของไหล แต่ไม่ได้คำนวณการเคลื่อนตัวของผิวรอยต่อจากปริมาตรท่อ หากค่าความดันที่กำหนดไม่สอดคล้องกับสมดุล ระบบจะคำนวณ P_B ที่ต้องเป็นเพื่อให้สมดุล</p>
