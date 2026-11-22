@@ -1,7 +1,7 @@
 -- Learning Applications visit analytics. Count one launch per explicit app open (not every slider change).
 create table if not exists public.learning_app_visits (
  id bigint generated always as identity primary key,
- app_id text not null check (app_id in ('pressure-manometry','couette-poiseuille')),
+ app_id text not null check (app_id in ('pressure-manometry','couette-poiseuille','fluid-properties')),
  user_id uuid not null references auth.users(id) on delete cascade,
  visited_at timestamptz not null default now()
 );
@@ -15,7 +15,7 @@ returns void language plpgsql security definer set search_path = '' as $$
 declare v_user uuid := auth.uid();
 begin
  if v_user is null then raise exception 'Authentication required'; end if;
- if p_app_id not in ('pressure-manometry','couette-poiseuille') then raise exception 'Unknown app'; end if;
+ if p_app_id not in ('pressure-manometry','couette-poiseuille','fluid-properties') then raise exception 'Unknown app'; end if;
  if not exists(select 1 from public.profiles p where p.id=v_user and p.role='teacher')
  and not exists(select 1 from public.enrollments e join public.courses c on c.id=e.course_id
    where e.student_id=v_user and e.status='approved' and c.code='4112203')
@@ -39,3 +39,7 @@ revoke all on function public.record_learning_app_visit(text) from public, anon;
 revoke all on function public.learning_app_visit_stats() from public, anon;
 grant execute on function public.record_learning_app_visit(text) to authenticated;
 grant execute on function public.learning_app_visit_stats() to authenticated;
+
+-- Upgrade existing production constraint to include the new calculator.
+alter table public.learning_app_visits drop constraint if exists learning_app_visits_app_id_check;
+alter table public.learning_app_visits add constraint learning_app_visits_app_id_check check (app_id in ('pressure-manometry','couette-poiseuille','fluid-properties'));
