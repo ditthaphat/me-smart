@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { userMessage } from '../lib/messages';
 import { db } from '../lib/supabase';
 import { sortStudentsByNumber } from '../lib/student-sort';
@@ -32,6 +33,7 @@ const teacherTabs = [
   { id: 'research', label: 'งานวิจัย', icon: '⚗' },
   { id: 'materials', label: 'เอกสารการสอน', icon: '▧' },
   { id: 'planner', label: 'งาน / ปฏิทิน', icon: '▦' },
+  { id: 'learning', label: 'แอปเสริมการเรียน', icon: '◈' },
 ] as const;
 type TeacherTab = (typeof teacherTabs)[number]['id'];
 
@@ -379,6 +381,7 @@ export default function Home() {
           <div id="teacher-panel-materials" role="tabpanel" aria-labelledby="teacher-tab-materials" hidden={teacherTab !== 'materials'}>
             {materialsVisited && <MaterialsPanel teacherId={profile.id} active={teacherTab === 'materials'} />}
           </div>
+          <div id="teacher-panel-learning" role="tabpanel" aria-labelledby="teacher-tab-learning" hidden={teacherTab !== 'learning'}><section className={styles.card}><h2>Learning Applications | แอปพลิเคชันเสริมการเรียนรู้</h2><p>ทดลองแบบจำลอง Couette–Poiseuille Flow พร้อมกราฟและการคำนวณแบบโต้ตอบ</p><Link href="/learning-applications" className={styles.secondaryButton}>เปิดห้องทดลอง Fluid Mechanics →</Link></section></div>
           {futureTeacherAreas.map(area => <div key={area.id} id={`teacher-panel-${area.id}`} role="tabpanel" aria-labelledby={`teacher-tab-${area.id}`} hidden={teacherTab !== area.id}>
             <section className={`${styles.card} ${styles.futureCard}`}>
               <span className={styles.futureBadge}>กำลังพัฒนา</span>
