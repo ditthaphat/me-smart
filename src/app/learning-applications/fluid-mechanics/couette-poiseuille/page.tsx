@@ -9,6 +9,7 @@ export default function CouettePoiseuilleLab() {
   const [hmm, setHmm] = useState(1);
   const [mu, setMu] = useState(0.1);
   const [dp, setDp] = useState(100);
+  useEffect(()=>{if(auth!=='allowed')return;void db().rpc('record_learning_app_visit',{p_app_id:'couette-poiseuille'}).then(({error})=>{if(error)console.warn('Visit tracking unavailable',error.message)});},[auth]);
   const h = hmm / 1000, L = 0.1;
   useEffect(() => {
     let active = true;
