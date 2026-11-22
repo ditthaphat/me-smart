@@ -35,14 +35,11 @@ export default function MultiUManometer(){
  const tube=(i:number)=>{const x=72+i*182, x2=x+118, bottom=282, leftY=y(selected[i].left),rightY=y(selected[i].right);const heavy=fluid(selected[i].fluid).color,upper=fluid(carrier).color;
   return <g key={i}>
    <path d={`M${x} ${leftY} V${bottom-59} A59 59 0 0 0 ${x2} ${bottom-59} V${rightY}`} fill="none" stroke={heavy} strokeWidth="18"/>
-   <path d={`M${x} 55 V${leftY}`} stroke={upper} strokeWidth="18"/>
-   <path d={`M${x2} ${rightY} V55`} stroke={upper} strokeWidth="18"/>
    <line x1={x-23} x2={x+15} y1={leftY} y2={leftY} stroke="#233e56" strokeWidth="1.5" strokeDasharray="3 2"/>
    <line x1={x2-15} x2={x2+23} y1={rightY} y2={rightY} stroke="#233e56" strokeWidth="1.5" strokeDasharray="3 2"/>
    <text x={x+58} y="310" fontSize="13" textAnchor="middle" fill="#173f55">U{i+1}: {selected[i].fluid.split(' · ')[0]}</text>
    <text x={x-6} y={Math.max(18,leftY-8)} fontSize="11" textAnchor="middle" fill="#173f55">{fmt(selected[i].left)} m</text>
    <text x={x2+5} y={Math.max(18,rightY-8)} fontSize="11" fill="#173f55">{fmt(selected[i].right)} m</text>
-   {i<count-1&&<path d={`M${x2} 55 Q${x2} 35 ${x2+20} 35 H${x+162} Q${x+182} 35 ${x+182} 55`} stroke={upper} strokeWidth="18"/>}
   </g>;
  };
  return <section style={{border:'1px solid #c7dce7',borderRadius:15,padding:20,background:'white',marginTop:16,color:'#123c54'}}>
@@ -62,7 +59,12 @@ export default function MultiUManometer(){
  <svg viewBox={`0 0 ${W} ${H}`} style={{display:'block',width:'100%',minWidth:Math.max(450,W),maxWidth:1000}} role="img" aria-label={`ภาพท่อ U ${count} ชุดต่อเนื่องกัน แสดงของไหลและระดับรอยต่อซ้ายขวาตามข้อมูลที่กรอก`}>
  {(() => {let d='M18 35 H52 Q72 35 72 55';for(let i=0;i<count;i++){const x=72+i*182;const x2=x+118;d+=` V223 A59 59 0 0 0 ${x2} 223 V55 Q${x2} 35 ${x2+20} 35`;if(i<count-1){d+=` H${x+162} Q${x+182} 35 ${x+182} 55`;}else{d+=` H${W-18}`;}}return <><path d={d} fill="none" stroke="#426c82" strokeWidth="26" strokeLinejoin="round"/><path d={d} fill="none" stroke="#f4f9fc" strokeWidth="18" strokeLinejoin="round"/></>})()}
  {selected.map((_,i)=>tube(i))}
- <path d="M18 35 H52 Q72 35 72 55" fill="none" stroke={fluid(carrier).color} strokeWidth="18"/><path d={`M${72+(count-1)*182+118} 55 Q${72+(count-1)*182+138} 35 ${72+(count-1)*182+138} 35 H${W-18}`} fill="none" stroke={fluid(carrier).color} strokeWidth="18"/><text x="12" y="26" fontSize="16" fontWeight="bold">A</text><text x={W-26} y="26" fontSize="16" fontWeight="bold">B</text>
+ {(() => {const upper=fluid(carrier).color;const firstY=y(selected[0].left);const lastX=72+(count-1)*182+118;const lastY=y(selected[count-1].right);return <g fill="none" stroke={upper} strokeWidth="18" strokeLinejoin="round">
+ <path d={`M18 35 H52 Q72 35 72 55 V${firstY}`}/>
+ {selected.slice(0,-1).map((c,i)=>{const rightX=72+i*182+118;const nextX=72+(i+1)*182;return <path key={i} d={`M${rightX} ${y(c.right)} V55 Q${rightX} 35 ${rightX+20} 35 H${nextX-20} Q${nextX} 35 ${nextX} 55 V${y(selected[i+1].left)}`}/>})}
+ <path d={`M${lastX} ${lastY} V55 Q${lastX} 35 ${lastX+20} 35 H${W-18}`}/>
+ </g>})()}
+ <text x="12" y="26" fontSize="16" fontWeight="bold">A</text><text x={W-26} y="26" fontSize="16" fontWeight="bold">B</text>
  <text x="15" y="328" fontSize="12">z = 0 ที่ระดับเริ่มโค้ง (เส้นอ้างอิงแนวดิ่ง) · ระดับรอยต่อแสดงตามสัดส่วน H</text>
  </svg></div>
  <p style={{fontSize:13}}>ปลาย A และ B เป็นจุดต่อท่อที่ระดับเดียวกัน; เส้นสีด้านบนคือของไหลหลัก ส่วนโค้งแต่ละ U เป็นของไหลที่เลือก · ภาพแสดงระดับรอยต่อของไหลตามค่าที่ป้อนจริงบนแกนความสูงร่วมกัน สีแยกชนิดของไหล แต่ไม่ได้คำนวณการเคลื่อนตัวของผิวรอยต่อจากปริมาตรท่อ หากค่าความดันที่กำหนดไม่สอดคล้องกับสมดุล ระบบจะคำนวณ P_B ที่ต้องเป็นเพื่อให้สมดุล</p>
