@@ -18,7 +18,10 @@ export default function LearningApplications() {
       if (profileError || !profile) { if(active) setAuth('denied'); return; }
       if (profile.role === 'teacher') { if(active) setAuth('allowed'); return; }
       if (profile.role !== 'student') { if(active) setAuth('denied'); return; }
-      const {data: enrollment, error: enrollmentError} = await db().from('enrollments').select('course_id').eq('student_id',data.user.id).eq('status','approved').limit(1);
+      const {data: fluidCourses, error: courseError} = await db().from('courses').select('id').eq('code','4112203');
+      if (courseError || !fluidCourses?.length) { if(active) setAuth('denied'); return; }
+      const courseIds = fluidCourses.map(course => course.id);
+      const {data: enrollment, error: enrollmentError} = await db().from('enrollments').select('course_id').eq('student_id',data.user.id).eq('status','approved').in('course_id',courseIds).limit(1);
       if(active) setAuth(!enrollmentError && (enrollment?.length ?? 0)>0 ? 'allowed':'denied');
     })
       .catch(() => {if(active) setAuth('denied');});
@@ -37,7 +40,7 @@ export default function LearningApplications() {
   const y = (z:number) => 290-z*240;
   const curve = profile.map((p,i)=>`${i?'L':'M'} ${x(p.velocity).toFixed(2)} ${y(p.z).toFixed(2)}`).join(' ');
   if(auth==='loading') return <main style={{padding:32}}>กำลังตรวจสอบสิทธิ์ผู้ใช้งาน...</main>;
-  if(auth==='denied') return <main style={{padding:32}}><h1>Learning Applications</h1><p>กรุณาเข้าสู่ระบบ ME-SMART และตรวจสอบสิทธิ์การลงทะเบียนรายวิชาที่ได้รับอนุมัติก่อนใช้งาน</p><Link href="/">เข้าสู่ระบบ</Link></main>;
+  if(auth==='denied') return <main style={{padding:32}}><h1>Learning Applications</h1><p>การเข้าใช้งานแบบจำลองนี้จำกัดเฉพาะนักศึกษาที่ลงทะเบียนและได้รับอนุมัติในรายวิชา 4112203 Fluid Mechanics (หรืออาจารย์ผู้สอน)</p><Link href="/">เข้าสู่ระบบ</Link></main>;
   return <main style={{maxWidth:1050,margin:'0 auto',padding:'24px 18px',fontFamily:'system-ui, sans-serif',color:'#14263d'}}>
     <Link href="/">← กลับสู่ ME-SMART</Link>
     <h1>Learning Applications | แอปพลิเคชันเสริมการเรียนรู้</h1>
