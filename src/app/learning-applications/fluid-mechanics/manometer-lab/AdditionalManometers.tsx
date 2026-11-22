@@ -1,11 +1,13 @@
 'use client';
 import {useState} from 'react';
+import MultiUManometer from './MultiUManometer';
 const g=9.81;
 const input={width:'100%',padding:10,border:'1px solid #9db8c6',borderRadius:8,fontSize:16} as const;
 const fluids=[{name:'Water · น้ำ',rho:997,color:'#75c5e6'},{name:'Mercury · ปรอท',rho:13546,color:'#9e9bb3'},{name:'Oil · น้ำมัน',rho:850,color:'#e2bc69'},{name:'Glycerin · กลีเซอริน',rho:1260,color:'#a5d4a8'}];
 const fmt=(v:number)=>Number.isFinite(v)?v.toLocaleString('en-US',{maximumFractionDigits:5}):'—';
 type Segment={fluid:string;rho:number;h:number;direction:1|-1};
 export default function AdditionalManometers({tab}:{tab:'piezometer'|'multi'}){
+ if(tab==='multi')return <MultiUManometer/>;
 
  const [rho,setRho]=useState(997),[h,setH]=useState(1.2),[pAtm,setPAtm]=useState(101.325);
  const [uCount,setUCount]=useState(2),[pA,setPA]=useState(200);
