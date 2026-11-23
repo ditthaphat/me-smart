@@ -9,15 +9,16 @@ const {create,act}=require('react-test-renderer');
 globalThis.IS_REACT_ACT_ENVIRONMENT=true;
 
 const records={material_publications:[],material_open_events:[]};
-let serial=0, rejectClick=false, lastTab=null, fallbackUrl='';
+let serial=0, rejectClick=false, rejectStatus=false, lastTab=null, fallbackUrl='', activeStudent='student-a';
 function query(table) {
   let action='select', payload=null, filters=[], slice=null;
   function result(single=false) {
     let rows=records[table].filter(row=>filters.every(([key,value])=>Array.isArray(value)?value.includes(row[key]):row[key]===value));
     if(action==='insert'){
       if(table==='material_open_events' && rejectClick) return {data:null,error:{message:'permission denied'},count:null};
+      if(table==='material_open_events' && records.material_open_events.some(row=>row.publication_id===payload.publication_id&&row.student_id===activeStudent)) return {data:null,error:{message:'MATERIAL_ALREADY_OPENED'},count:null};
       const row={id:++serial,created_at:'2026-11-15T00:00:00Z',...payload};
-      if(table==='material_open_events')row.student_id='student-a';
+      if(table==='material_open_events')row.student_id=activeStudent;
       records[table].push(row); rows=[row];
     }
     if(action==='update') rows.forEach(row=>Object.assign(row,payload));
@@ -35,7 +36,13 @@ function query(table) {
 }
 const fakeDb={
   from:query,
-  rpc:async(name,{p_publication_id})=>{
+  rpc:async(name,{p_publication_id,p_publication_ids})=>{
+    if(name==='student_material_open_status'&&rejectStatus)return {data:null,error:{message:'status unavailable'}};
+    if(name==='student_material_open_status')return {data:p_publication_ids.map(id=>({
+      publication_id:id,
+      already_opened:records.material_open_events.some(e=>e.publication_id===id&&e.student_id===activeStudent),
+      student_id_available:true,
+    })),error:null};
     assert.equal(name,'teacher_material_open_stats');
     const count=records.material_open_events.filter(e=>e.publication_id===p_publication_id&&e.student_id==='student-a').length;
     return {data:[
@@ -84,28 +91,32 @@ test('teacher publishes, student clicks, teacher sees current-roster counts, the
   assert.equal(records.material_open_events.length,1);
   assert.equal(lastTab.url,'https://example.com/chapter');
   assert.equal(lastTab.opener,null);
+  assert.equal(button(student.root,'เคยกดเปิดแล้ว').props.disabled,true);
   await click(button(teacher.root,'อัปเดตสถิติ'));
   assert.match(textOf(teacher.root),/1\/2/);
   assert.match(textOf(teacher.root),/50%/);
   assert.match(textOf(teacher.root),/ยังไม่เคยกด/);
+  activeStudent='student-b';
+  let secondStudent; await act(async()=>{secondStudent=create(React.createElement(Student,{course:courses[0]}));});
   await click(button(teacher.root,'หยุดเผยแพร่'));
   assert.equal(records.material_publications[0].is_published,false);
   rejectClick=true;
-  await click(button(student.root,'เปิดเอกสาร ↗'));
+  await click(button(secondStudent.root,'เปิดเอกสาร ↗'));
   assert.equal(records.material_open_events.length,1);
   assert.equal(lastTab.closed,true);
-  assert.match(textOf(student.root),/บันทึกการขอเปิดไม่สำเร็จ/);
-  assert.equal(student.root.findAllByType('article').length,0);
-  await act(async()=>{teacher.unmount();student.unmount();});
+  assert.match(textOf(secondStudent.root),/บันทึกการขอเปิดไม่สำเร็จ/);
+  assert.equal(secondStudent.root.findAllByType('article').length,0);
+  await act(async()=>{teacher.unmount();student.unmount();secondStudent.unmount();});
 });
 
 test('popup-blocked browsers still navigate after the request was recorded',async()=>{
-  records.material_publications[0].is_published=true; rejectClick=false;
+  records.material_publications[0].is_published=true; rejectClick=false; activeStudent='student-b';
   window.open=()=>null;
   let student; await act(async()=>{student=create(React.createElement(Student,{course:{id:5,code:'4112203',title:'Fluid Mechanics',term:'2/2569'}}));});
   await click(button(student.root,'เปิดเอกสาร ↗'));
   assert.equal(records.material_open_events.length,2);
   assert.equal(fallbackUrl,'https://example.com/chapter');
+  assert.equal(button(student.root,'เคยกดเปิดแล้ว').props.disabled,true);
   await act(async()=>student.unmount());
 });
 
@@ -124,4 +135,32 @@ test('student document lists are scoped to the selected course',async()=>{
     assert.match(textOf(second.root),/เอกสาร CAE/);
     assert.doesNotMatch(textOf(second.root),/เอกสารของไหล|เอกสารยังไม่เผยแพร่/);
   }finally{if(first)await act(async()=>first.unmount());if(second)await act(async()=>second.unmount());}
+});
+
+test('cancelled clicks do not spend the allowance and another tab is detected',async()=>{
+  records.material_publications=[{id:81,course_id:5,title:'เอกสารทดสอบ',material_type:'lesson',version_label:'',external_url:'https://example.com/test',is_published:true}];
+  activeStudent='student-c'; rejectClick=false; rejectStatus=false;
+  window.open=()=>{lastTab={opener:{},closed:false,location:{replace(value){lastTab.url=value;}},close(){lastTab.closed=true;}};return lastTab;};
+  window.confirm=()=>false;
+  let student; await act(async()=>{student=create(React.createElement(Student,{course:{id:5,code:'4112203',title:'Fluid',term:'2/2569'}}));});
+  const count=records.material_open_events.length;
+  await click(button(student.root,'เปิดเอกสาร ↗'));
+  assert.equal(records.material_open_events.length,count);
+  window.confirm=()=>true;
+  records.material_open_events.push({publication_id:81,student_id:'student-c'});
+  await click(button(student.root,'เปิดเอกสาร ↗'));
+  assert.equal(records.material_open_events.length,count+1);
+  assert.equal(lastTab.closed,true);
+  assert.match(textOf(student.root),/เอกสารนี้เคยกดเปิดผ่าน ME-Smart แล้ว/);
+  assert.equal(button(student.root,'เคยกดเปิดแล้ว').props.disabled,true);
+  await act(async()=>student.unmount());
+});
+
+test('status lookup failure does not allow opening a document',async()=>{
+  activeStudent='student-d'; rejectStatus=true;
+  let student; await act(async()=>{student=create(React.createElement(Student,{course:{id:5,code:'4112203',title:'Fluid',term:'2/2569'}}));});
+  assert.match(textOf(student.root),/โหลดเอกสารไม่สำเร็จ/);
+  assert.equal(button(student.root,'เปิดเอกสาร ↗'),undefined);
+  rejectStatus=false;
+  await act(async()=>student.unmount());
 });
