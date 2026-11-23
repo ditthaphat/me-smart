@@ -121,14 +121,14 @@ export default function MaterialPublicationPanel({ teacherId, source, courseName
     </div>
     {publication && <div className={styles.card}>
       <div className={styles.sectionTitle}><div><h3>สถิติการกดขอเปิดผ่าน ME-Smart</h3><p>นับเฉพาะนักศึกษาที่ได้รับอนุมัติในรายวิชาปัจจุบัน</p></div></div>
-      <p className={styles.note}>สถิตินี้นับการกดขอเปิด ไม่ยืนยันว่าไฟล์เปิดหรือดาวน์โหลดสำเร็จ และไม่รวมการเปิดลิงก์โดยตรงจากแหล่งอื่น</p>
+      <p className={styles.note}>ตัวเลขในแต่ละแถวคือจำนวนครั้งที่นักศึกษาคนนั้นกดขอเปิดผ่าน ME-Smart ข้อมูลย้อนหลังหรือการเปลี่ยนลิงก์/เวอร์ชันอาจทำให้มีมากกว่า 1 ครั้ง การกดไม่ยืนยันว่าเปิดหรือดาวน์โหลดสำเร็จ และไม่รวมการเปิดลิงก์โดยตรงจากแหล่งอื่น</p>
       <div className={styles.statGrid}>
         <div><strong>{summary.people}/{stats.length}</strong><span>นักศึกษาที่เคยกด</span></div>
         <div><strong>{summary.percent}%</strong><span>สัดส่วนที่เคยกด</span></div>
         <div><strong>{summary.requests}</strong><span>จำนวนครั้งที่กด</span></div>
       </div>
       {stats.length === 0 ? <p className={styles.empty}>ยังไม่มีนักศึกษาที่ได้รับอนุมัติในรายวิชานี้</p> : <>
-        <div className={styles.reportTable}><table><thead><tr><th>รหัสนักศึกษา</th><th>ชื่อ–สกุล</th><th>จำนวนครั้ง</th><th>กดล่าสุด</th></tr></thead><tbody>{stats.slice(page * 10, page * 10 + 10).map(row => <tr key={row.student_id}><td>{row.student_number || '—'}</td><td>{row.full_name || 'ไม่พบชื่อ'}</td><td>{Number(row.open_count) ? Number(row.open_count) : 'ยังไม่เคยกด'}</td><td>{readableTime(row.last_open)}</td></tr>)}</tbody></table></div>
+        <div className={styles.reportTable}><table><thead><tr><th>รหัสนักศึกษา</th><th>ชื่อ–สกุล</th><th>จำนวนครั้งที่กด</th><th>กดล่าสุด</th></tr></thead><tbody>{stats.slice(page * 10, page * 10 + 10).map(row => <tr key={row.student_id}><td>{row.student_number || '—'}</td><td>{row.full_name || 'ไม่พบชื่อ'}</td><td>{Number(row.open_count) ? Number(row.open_count) : 'ยังไม่เคยกด'}</td><td>{readableTime(row.last_open)}</td></tr>)}</tbody></table></div>
         <Pagination page={page} total={stats.length} onChange={setPage} />
       </>}
     </div>}
