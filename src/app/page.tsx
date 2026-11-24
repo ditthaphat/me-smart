@@ -137,7 +137,8 @@ export default function Home() {
 
   useEffect(() => {
     void load();
-    const { data: { subscription } } = db().auth.onAuthStateChange(() => {
+    const { data: { subscription } } = db().auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') { window.location.replace('/forgot-password?recovery=1'); return; }
       // Delay reads until the auth callback has finished processing the session.
       setTimeout(() => { void load(); }, 0);
     });
@@ -324,6 +325,7 @@ export default function Home() {
             <label className={styles.field}>อีเมล<input required type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} /></label>
             <label className={styles.field}>รหัสผ่าน<input required type="password" minLength={signup ? 6 : undefined} autoComplete={signup ? 'new-password' : 'current-password'} value={password} onChange={e => setPassword(e.target.value)} /></label>
             <div className={styles.actions}><button disabled={busy} type="submit" className={styles.primaryButton}>{busy ? 'กำลังดำเนินการ...' : signup ? 'สมัครบัญชี' : 'เข้าสู่ระบบ'}</button><button type="button" disabled={busy} className={styles.secondaryButton} onClick={() => { setSignup(!signup); setError(''); setMsg(''); }}>{signup ? 'มีบัญชีแล้ว' : 'สมัครบัญชีนักศึกษา'}</button></div>
+            {!signup && <p><Link href="/forgot-password">ลืมรหัสผ่าน?</Link></p>}
           </form>
           <div className={styles.quickGuide}><strong>เริ่มใช้งานสำหรับนักศึกษา</strong><p>1. สมัครบัญชีและยืนยันอีเมล<br />2. เข้าร่วมรายวิชาและรออาจารย์อนุมัติ<br />3. สแกน QR เพื่อบันทึกการเข้าเรียน</p></div>
         </section>
