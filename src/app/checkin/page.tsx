@@ -3,7 +3,8 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {userMessage} from '../../lib/messages';
 import {db} from '../../lib/supabase';
 import styles from '../smart-attendance.module.css';
-type Saved={status:string;note:string|null};
+type Saved={status:string;note:string|null;automatic_absence?:boolean};
+const isFinalRecord=(row:Saved|null)=>!!row&&!(row.status==='absent'&&row.automatic_absence===true);
 type ClassInfo={session_date:string;topic:string;is_cancelled:boolean;course_id:number};
 const statusLabels:Record<string,string>={present:'มาเรียน',late:'สาย',absent:'ขาด',leave:'ลา'};
 const checkinMessages:Record<string,string>={
@@ -32,19 +33,19 @@ export default function Checkin(){
  },[]);
  const readSaved=useCallback(async()=>{
   if(!userId)return null;
-  const {data,error:e}=await db().from('attendance_records').select('status,note').eq('session_id',sid).eq('student_id',userId).maybeSingle();
+  const {data,error:e}=await db().from('attendance_records').select('status,note,automatic_absence').eq('session_id',sid).eq('student_id',userId).maybeSingle();
   if(e)throw e;return data as Saved|null;
  },[sid,userId]);
  useEffect(()=>{if(!userId||!Number.isSafeInteger(sid)||sid<=0)return;let active=true;setContextLoading(true);setContextError('');setClaim('');
   void (async()=>{try{
    const [record,session,courses]=await Promise.all([readSaved(),db().from('attendance_sessions').select('session_date,topic,is_cancelled,course_id').eq('id',sid).maybeSingle(),db().rpc('my_courses')]);
-   if(!active)return;setSaved(record);if(session.error)throw session.error;setContext(session.data as ClassInfo|null);
+   if(!active)return;setSaved(isFinalRecord(record)?record:null);if(session.error)throw session.error;setContext(session.data as ClassInfo|null);
    if(!courses.error){const c=(courses.data as {id:number;code:string;title:string}[]|null)?.find(c=>c.id===session.data?.course_id);if(c)setCourse(`${c.code} · ${c.title}`)}
-   if(!record && !session.data?.is_cancelled && token){
+   if(!isFinalRecord(record) && !session.data?.is_cancelled && token){
     const {data,error:e}=await db().rpc('smart_prepare_qr_checkin',{p_session_id:sid,p_token:token});
     if(!active)return;if(e)throw e;
     if(!data?.ok){
-     if(data?.code==='already_recorded'){const existing=await readSaved();if(!active)return;if(existing){setSaved(existing);return;}}
+     if(data?.code==='already_recorded'){const existing=await readSaved();if(!active)return;if(isFinalRecord(existing)){setSaved(existing);return;}setError('ยังเช็กชื่อไม่ได้ กรุณาติดต่ออาจารย์เพื่อตรวจสอบสถานะหรือคำขอลา');return;}
      setError(checkinMessages[data?.code]??'ยังเตรียมการเช็กชื่อไม่ได้ กรุณาสแกนใหม่');
     }else if(typeof data.claim==='string' && data.claim){setError('');setClaim(data.claim)}
     else setError('ยังเตรียมการเช็กชื่อไม่ได้ กรุณาสแกนใหม่');
@@ -57,7 +58,7 @@ export default function Checkin(){
  async function submit(){if(submitting.current||saved)return;submitting.current=true;setBusy(true);setError('');setResult('');try{
   if(!Number.isSafeInteger(sid)||sid<=0||!token||!claim)throw Error('ลิงก์ QR ไม่พร้อม กรุณาสแกนใหม่');
   // A previous successful write may have lost its response. Read first; never send a duplicate write intentionally.
-  const existing=await readSaved();if(existing){setSaved(existing);return}
+  const existing=await readSaved();if(isFinalRecord(existing)){setSaved(existing);return}
   let lat:number|null=null,lng:number|null=null,accuracy:number|null=null;
   if(navigator.geolocation){try{const pos=await new Promise<GeolocationPosition>((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true,timeout:12000,maximumAge:0}));lat=pos.coords.latitude;lng=pos.coords.longitude;accuracy=pos.coords.accuracy;}catch{/* The server decides whether location is required. */}}
   const {data,error:e}=await db().rpc('smart_finish_qr_checkin',{p_session_id:sid,p_claim:claim,p_lat:lat,p_lng:lng,p_accuracy:accuracy});if(e)throw e;
@@ -65,7 +66,7 @@ export default function Checkin(){
   const status=data.status;
   if(status!=='late'&&status!=='present')throw Error('ยังยืนยันสถานะไม่ได้ กรุณาตรวจประวัติหรือติดต่ออาจารย์');
   setSaved({status,note:'Smart QR self check-in'});setConfirmedAt(new Date().toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}));setResult('บันทึกสำเร็จ');
- }catch(e){setError(userMessage(e));try{const row=await readSaved();if(row){setSaved(row);setError('')}}catch{/* Preserve original actionable error. */}}finally{submitting.current=false;setBusy(false)}}
+ }catch(e){setError(userMessage(e));try{const row=await readSaved();if(isFinalRecord(row)){setSaved(row);setError('')}}catch{/* Preserve original actionable error. */}}finally{submitting.current=false;setBusy(false)}}
  const invalid=ready&&(!Number.isSafeInteger(sid)||sid<=0||!token);
  return <main className={styles.checkin}><h1>ME-Smart · QR Check-in</h1><p>เข้าสู่ระบบด้วยบัญชีนักศึกษาที่ได้รับอนุมัติในรายวิชา</p>
  {invalid&&<p role="alert" className={styles.error}>ลิงก์ QR ไม่ครบถ้วน กรุณาสแกน QR ล่าสุดจากอาจารย์</p>}

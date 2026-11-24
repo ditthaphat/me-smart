@@ -12,13 +12,13 @@ window.location = { origin: 'https://preview.example', search: '' };
 globalThis.document = new EventTarget();
 document.visibilityState = 'visible';
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { geolocation: { getCurrentPosition(resolve) { resolve({ coords: { latitude: 13.7, longitude: 100.5, accuracy: 5 } }); } } } });
-let opened = false;
+let opened = false, savedRecord = null;
 const rpcCalls = [];
 const session = { id: 123, session_date: '2026-11-16', topic: 'Test', is_cancelled: false };
 function query(table) {
   const result = () => {
     if (table === 'smart_attendance_windows') return { data: opened ? { is_open: true, closes_at: new Date(Date.now() + 900000).toISOString(), late_after_minutes: 10, require_location: false, latitude: null, longitude: null, radius_m: 150 } : null, error: null };
-    if (table === 'attendance_records') return { data: null, count: 0, error: null };
+    if (table === 'attendance_records') return { data: savedRecord, count: savedRecord ? 1 : 0, error: null };
     if (table === 'attendance_sessions') return { data: { ...session, course_id: 5 }, error: null };
     return { data: null, error: null };
   };
@@ -145,6 +145,32 @@ test('student check-in accepts a link with separate session and token parameters
   } finally {
     if (student) await act(async () => student.unmount());
   }
+});
+
+test('an automatic absence can be checked in during a later QR window', async () => {
+  window.location.search = '?session=123&token=later-window';
+  savedRecord={status:'absent',note:'Automatic absence after QR window expired',automatic_absence:true};
+  const begin=rpcCalls.length;let student;
+  try {
+    await act(async()=>{student=create(React.createElement(Checkin));});
+    assert.equal(rpcCalls.slice(begin).filter(c=>c.name==='smart_prepare_qr_checkin').length,1);
+    const confirm=student.root.findAllByType('button').find(b=>b.children.includes('ยืนยันการเข้าเรียน'));
+    assert.ok(confirm);assert.equal(confirm.props.disabled,false);
+    await act(async()=>confirm.props.onClick());
+    assert.equal(rpcCalls.slice(begin).filter(c=>c.name==='smart_finish_qr_checkin').length,1);
+    assert.ok(student.root.findAllByType('strong').some(n=>n.children.includes('บันทึกสำเร็จ')));
+  } finally {savedRecord=null;if(student)await act(async()=>student.unmount());}
+});
+
+test('a teacher-recorded absence remains protected', async () => {
+  window.location.search = '?session=123&token=later-window';
+  savedRecord={status:'absent',note:'teacher decision',automatic_absence:false};
+  const begin=rpcCalls.length;let student;
+  try {
+    await act(async()=>{student=create(React.createElement(Checkin));});
+    assert.equal(rpcCalls.slice(begin).filter(c=>c.name==='smart_prepare_qr_checkin').length,0);
+    assert.equal(student.root.findAllByType('button').filter(b=>b.children.includes('ยืนยันการเข้าเรียน')).length,0);
+  } finally {savedRecord=null;if(student)await act(async()=>student.unmount());}
 });
 
 test('student is warned and no check-in is sent when QR parameters are missing', async () => {
