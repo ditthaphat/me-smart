@@ -1,0 +1,33 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const Module=require('node:module');
+const ts=require('typescript');
+const React=require('react');
+const {create,act}=require('react-test-renderer');
+globalThis.IS_REACT_ACT_ENVIRONMENT=true;
+let session=null,requests=[],updates=[];
+const auth={getSession:async()=>({data:{session},error:null}),resetPasswordForEmail:async(...args)=>{requests.push(args);return {error:null}},updateUser:async(value)=>{updates.push(value);return {error:null}}};
+const previous=Module._load;
+Module._load=function(request,parent){if(parent?.filename.endsWith('/forgot-password/page.tsx')){if(request==='../../lib/supabase')return {db:()=>({auth})};if(request==='next/link')return {__esModule:true,default:({children,...props})=>React.createElement('a',props,children)};if(request.endsWith('.css'))return {__esModule:true,default:new Proxy({},{get:(_,key)=>String(key)})};}return previous.apply(this,arguments)};
+require.extensions['.tsx']=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,file);
+const Page=require('../src/app/forgot-password/page.tsx').default;
+Module._load=previous;
+const textOf=n=>n.children.flatMap(x=>typeof x==='string'?[x]:x&&typeof x==='object'?textOf(x):[]).join('');
+test('request sends a reset email to the configured origin without exposing account existence',async()=>{
+ global.window={location:{origin:'https://me-smart.vercel.app',search:''}};let app;
+ await act(async()=>{app=create(React.createElement(Page))});
+ await act(async()=>app.root.findByType('input').props.onChange({target:{value:'student@example.com'}}));
+ await act(async()=>app.root.findByType('form').props.onSubmit({preventDefault(){}}));
+ assert.deepEqual(requests,[['student@example.com',{redirectTo:'https://me-smart.vercel.app/'}]]);
+ assert.match(textOf(app.root),/หากอีเมลนี้มีบัญชี/);await act(async()=>app.unmount());
+});
+test('recovery requires a session and matching new passwords',async()=>{
+ global.window={location:{origin:'https://me-smart.vercel.app',search:'?recovery=1'}};session=null;let app;
+ await act(async()=>{app=create(React.createElement(Page))});assert.match(textOf(app.root),/หมดอายุหรือไม่ถูกต้อง/);await act(async()=>app.unmount());
+ session={user:{id:'example'}};await act(async()=>{app=create(React.createElement(Page))});
+ let inputs=app.root.findAllByType('input');await act(async()=>{inputs[0].props.onChange({target:{value:'abcdef'}});inputs[1].props.onChange({target:{value:'different'}})});
+ await act(async()=>app.root.findByType('form').props.onSubmit({preventDefault(){}}));assert.match(textOf(app.root),/ไม่ตรงกัน/);assert.equal(updates.length,0);
+ inputs=app.root.findAllByType('input');await act(async()=>inputs[1].props.onChange({target:{value:'abcdef'}}));await act(async()=>app.root.findByType('form').props.onSubmit({preventDefault(){}}));
+ assert.deepEqual(updates,[{password:'abcdef'}]);assert.match(textOf(app.root),/เปลี่ยนรหัสผ่านแล้ว/);await act(async()=>app.unmount());
+});
