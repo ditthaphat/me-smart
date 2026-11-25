@@ -10,6 +10,7 @@ const statusLabels:Record<string,string>={present:'มาเรียน',late:'
 const checkinMessages:Record<string,string>={
  sign_in:'กรุณาเข้าสู่ระบบ',
  not_enrolled:'ไม่ได้รับอนุมัติในรายวิชานี้',
+ wrong_group:'QR นี้สำหรับนักศึกษาอีกกลุ่มเรียน กรุณาติดต่ออาจารย์',
  cancelled:'คาบนี้ยกเลิกแล้ว',
  closed:'ปิดรับเช็คชื่อแล้ว',
  invalid_qr:'QR หมดอายุหรือไม่ถูกต้อง กรุณาสแกน QR ล่าสุดอีกครั้ง',
