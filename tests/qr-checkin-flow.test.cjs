@@ -30,7 +30,7 @@ const fakeDb = {
   auth: { getUser: async () => ({ data: { user: { id: 'test-student' } }, error: null }) },
   rpc: async (name, args) => {
     rpcCalls.push({ name, args });
-    if (name === 'smart_start_window') opened = true;
+    if (name === 'smart_start_group_window') opened = true;
     if (name === 'smart_stop_window') opened = false;
     if (name === 'smart_rotate_qr') return { data: 'synthetic-token', error: null };
     if (name === 'my_courses') return { data: [{ id: 5, code: 'TEST', title: 'Test course' }], error: null };
@@ -64,6 +64,26 @@ test('QR link keeps the session and token intact', () => {
   const link = new URL(qrLink('https://preview.example', 123, token));
   assert.equal(link.searchParams.get('session'), '123');
   assert.equal(link.searchParams.get('token'), token);
+});
+
+test('grouped course requires an explicit group and opens the selected round', async () => {
+  opened = false;
+  let teacher;
+  try {
+    await act(async () => { teacher = create(React.createElement(Teacher, { session: { ...session, course_id: 1 }, courseCode: '4112203', onLockChange() {} })); });
+    const open = teacher.root.findAllByType('button').find(b => b.children.includes('เปิดรับเช็คชื่อ'));
+    const before = rpcCalls.length;
+    await act(async () => { open.props.onClick(); });
+    assert.equal(rpcCalls.slice(before).filter(c => c.name === 'smart_start_group_window').length, 0);
+    const select = teacher.root.findByType('select');
+    await act(async () => { select.props.onChange({target:{value:'evening'}}); });
+    await act(async () => { open.props.onClick(); });
+    const start = rpcCalls.slice(before).find(c => c.name === 'smart_start_group_window');
+    assert.equal(start.args.p_group, 'evening');
+  } finally {
+    if (teacher) await act(async () => teacher.unmount());
+    opened = false;
+  }
 });
 
 test('teacher QR supplies both parameters to the student check-in flow', async () => {
